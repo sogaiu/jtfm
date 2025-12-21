@@ -1,0 +1,54 @@
+Usage: jtfm [<file-or-dir>...]
+       jtfm [-h|--help]
+
+Create and run comment tests...just the facts, ma'am.
+
+Parameters:
+
+  <file-or-dir>          path to file or directory
+
+Options:
+
+  -h, --help             show this output
+
+Configuration:
+
+  .jtfm.jdn              configuration file
+
+Examples:
+
+  Create and run tests in `src/` directory:
+
+  $ jtfm src
+
+  `jtfm` can be used via `jpm`, `jeep`, etc. with
+  some one-time setup.  Create a suitable `.jtfm.jdn`
+  file in a project's root directory and a runner
+  file in a project's `test/` subdirectory (see below
+  for further details).
+
+  Run via `jeep test`:
+
+  $ jeep test
+
+  Run via `jpm test`:
+
+  $ jpm test
+
+  Run using the configuration file via direct
+  invocation:
+
+  $ jtfm
+
+Example `.jtfm.jdn` content:
+
+  {# describes what to test - file and dir paths
+   :includes ["src" "bin/my-script"]
+   # describes what to skip - file paths only
+   :excludes ["src/sample.janet"]}
+
+Example runner file `test/trigger-jtfm.janet`:
+
+  (import ../jtfm)
+
+  (jtfm/main)
