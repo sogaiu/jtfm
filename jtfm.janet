@@ -2331,8 +2331,8 @@
     (with-syms [$ts $tr
                 $es $er]
       ~(do
-         (def [,$ts ,$tr] (protect ,t-form))
-         (def [,$es ,$er] (protect ,e-form))
+         (def [,$ts ,$tr] (protect (eval ',t-form)))
+         (def [,$es ,$er] (protect (eval ',e-form)))
          (array/push _verify/test-results
                      {:expected-form ',e-form
                       :expected-value ,$er
