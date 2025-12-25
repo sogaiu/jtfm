@@ -1,6 +1,24 @@
 (import ./jipper :prefix "")
 (import ./verify :prefix "")
 
+# at its simplest, a test is expressed like:
+#
+# (comment
+#
+#   (+ 1 1)
+#   # =>
+#   2
+#
+#   )
+#
+# i.e. inside a comment form, a single test consists of:
+#
+# * a test expression        -  `(+ 1 1)` above
+# * a test indicator         - `# =>` above
+# * an expected expression   - `2` above
+#
+# there can be one or more tests within a comment form.
+
 # ti == test indicator, which can look like any of:
 #
 # # =>
