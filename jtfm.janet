@@ -2555,6 +2555,9 @@
   (def before-zlocs @[])
   (var curr-zloc ti-zloc)
   (var found-before nil)
+  # collect zlocs to the left of the test indicator up through the
+  # first non-whitespace/comment one.  if there is a
+  # non-whitespace/comment one, that is the test expression.
   (while curr-zloc
     (set curr-zloc (j/left curr-zloc))
     (when (nil? curr-zloc)
@@ -2575,7 +2578,8 @@
   (cond
     (nil? curr-zloc)
     :no-test-expression
-    #
+    # if all collected zlocs (except the last one) are whitespace,
+    # then the test expression has been located
     (and found-before
          (->> (slice before-zlocs 0 -2)
               (filter |(not (match (j/node $)
@@ -2636,7 +2640,10 @@
   (var curr-zloc ti-zloc)
   (var found-comment nil)
   (var found-after nil)
-  #
+  # collect zlocs to the right of the test indicator up through the
+  # first non-whitespace/comment one.  if there is a
+  # non-whitespace/comment one, that is the expression used to compute
+  # the expected value.
   (while curr-zloc
     (set curr-zloc (j/right curr-zloc))
     (when (nil? curr-zloc)
@@ -2660,13 +2667,20 @@
     (or (nil? curr-zloc)
         found-comment)
     :no-expected-expression
-    #
+    # if there was a non-whitespace/comment zloc and the first zloc
+    # "captured" represents eol (i.e. the first zloc to the right of
+    # the test indicator), then there might be a an "expected
+    # expression" that follows...
     (and found-after
          (match (j/node (first after-zlocs))
            [:whitespace _ "\n"]
            true
            [:whitespace _ "\r\n"]
            true))
+    # starting on the line after the eol zloc, keep collected zlocs up
+    # to (but not including) another eol zloc.  the first
+    # non-whitespace zloc of the kept zlocs represents the "expected
+    # expression".
     (if-let [from-next-line (drop 1 after-zlocs)
              before-eol-zloc (take-until |(match (j/node $)
                                             [:whitespace _ "\n"]
@@ -3118,27 +3132,27 @@
 
   (r/rewrite src)
   # =>
-  (string  eol
-           " "               eol
-           eol
-           "  (_verify/is"   eol
-           "  (-> ``"        eol
-           "      123456789" eol
-           "      ``"        eol
-           "      length)"   eol
-           "  # =>"          eol
-           `  9 "line-7")`   eol
-           eol
-           "  (_verify/is"   eol
-           "  (->"           eol
-           "    ``"          eol
-           "    123456789"   eol
-           "    ``"          eol
-           "    length)"     eol
-           "  # =>"          eol
-           `  9 "line-15")`  eol
-           eol
-           "  :smile")
+  (string eol
+          " "               eol
+          eol
+          "  (_verify/is"   eol
+          "  (-> ``"        eol
+          "      123456789" eol
+          "      ``"        eol
+          "      length)"   eol
+          "  # =>"          eol
+          `  9 "line-7")`   eol
+          eol
+          "  (_verify/is"   eol
+          "  (->"           eol
+          "    ``"          eol
+          "    123456789"   eol
+          "    ``"          eol
+          "    length)"     eol
+          "  # =>"          eol
+          `  9 "line-15")`  eol
+          eol
+          "  :smile")
 
   )
 
