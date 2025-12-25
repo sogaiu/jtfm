@@ -2556,10 +2556,10 @@
   (var curr-zloc ti-zloc)
   (var found-before nil)
   (while curr-zloc
-    (set curr-zloc
-         (j/left curr-zloc))
+    (set curr-zloc (j/left curr-zloc))
     (when (nil? curr-zloc)
       (break))
+    #
     (match (j/node curr-zloc)
       [:comment]
       (array/push before-zlocs curr-zloc)
@@ -2607,26 +2607,26 @@
 
   (j/node ti-zloc)
   # =>
-  '(:comment @{:bc 3 :bl 6 :ec 7 :el 6} "# =>")
+  [:comment @{:bc 3 :bl 6 :ec 7 :el 6} "# =>"]
 
   (def test-expr-zloc
     (r/find-test-expr ti-zloc))
 
   (j/node test-expr-zloc)
   # =>
-  '(:tuple @{:bc 3 :bl 5 :ec 17 :el 5}
-           (:symbol @{:bc 4 :bl 5 :ec 7 :el 5} "put")
-           (:whitespace @{:bc 7 :bl 5 :ec 8 :el 5} " ")
-           (:table @{:bc 8 :bl 5 :ec 11 :el 5})
-           (:whitespace @{:bc 11 :bl 5 :ec 12 :el 5} " ")
-           (:keyword @{:bc 12 :bl 5 :ec 14 :el 5} ":a")
-           (:whitespace @{:bc 14 :bl 5 :ec 15 :el 5} " ")
-           (:number @{:bc 15 :bl 5 :ec 16 :el 5} "2"))
+  [:tuple @{:bc 3 :bl 5 :ec 17 :el 5}
+   [:symbol @{:bc 4 :bl 5 :ec 7 :el 5} "put"]
+   [:whitespace @{:bc 7 :bl 5 :ec 8 :el 5} " "]
+   [:table @{:bc 8 :bl 5 :ec 11 :el 5}]
+   [:whitespace @{:bc 11 :bl 5 :ec 12 :el 5} " "]
+   [:keyword @{:bc 12 :bl 5 :ec 14 :el 5} ":a"]
+   [:whitespace @{:bc 14 :bl 5 :ec 15 :el 5} " "]
+   [:number @{:bc 15 :bl 5 :ec 16 :el 5} "2"]]
 
   (-> (j/left test-expr-zloc)
       j/node)
   # =>
-  '(:whitespace @{:bc 1 :bl 5 :ec 3 :el 5} "  ")
+  [:whitespace @{:bc 1 :bl 5 :ec 3 :el 5} "  "]
 
   )
 
@@ -2638,10 +2638,10 @@
   (var found-after nil)
   #
   (while curr-zloc
-    (set curr-zloc
-         (j/right curr-zloc))
+    (set curr-zloc (j/right curr-zloc))
     (when (nil? curr-zloc)
       (break))
+    #
     (match (j/node curr-zloc)
       [:comment]
       (do
@@ -2668,13 +2668,13 @@
            [:whitespace _ "\r\n"]
            true))
     (if-let [from-next-line (drop 1 after-zlocs)
-             next-line (take-until |(match (j/node $)
-                                      [:whitespace _ "\n"]
-                                      true
-                                      [:whitespace _ "\r\n"]
-                                      true)
-                                   from-next-line)
-             target (->> next-line
+             before-eol-zloc (take-until |(match (j/node $)
+                                            [:whitespace _ "\n"]
+                                            true
+                                            [:whitespace _ "\r\n"]
+                                            true)
+                                         from-next-line)
+             target (->> before-eol-zloc
                          (filter |(match (j/node $)
                                     [:whitespace]
                                     false
@@ -2695,7 +2695,8 @@
             eol
             "  (put @{} :a 2)" eol
             "  # =>"           eol
-            "  @{:a 2}"        eol
+            "  @{:a 1"         eol
+            "    :b 2}"        eol
             eol
             "  )"))
 
@@ -2706,22 +2707,27 @@
 
   (j/node ti-zloc)
   # =>
-  '(:comment @{:bc 3 :bl 6 :ec 7 :el 6} "# =>")
+  [:comment @{:bc 3 :bl 6 :ec 7 :el 6} "# =>"]
 
   (def expected-expr-zloc
     (r/find-expected-expr ti-zloc))
 
   (j/node expected-expr-zloc)
   # =>
-  '(:table @{:bc 3 :bl 7 :ec 10 :el 7}
-           (:keyword @{:bc 5 :bl 7 :ec 7 :el 7} ":a")
-           (:whitespace @{:bc 7 :bl 7 :ec 8 :el 7} " ")
-           (:number @{:bc 8 :bl 7 :ec 9 :el 7} "2"))
+  [:table @{:bc 3 :bl 7 :ec 10 :el 8} 
+   [:keyword @{:bc 5 :bl 7 :ec 7 :el 7} ":a"] 
+   [:whitespace @{:bc 7 :bl 7 :ec 8 :el 7} " "] 
+   [:number @{:bc 8 :bl 7 :ec 9 :el 7} "1"] 
+   [:whitespace @{:bc 9 :bl 7 :ec 1 :el 8} "\n"] 
+   [:whitespace @{:bc 1 :bl 8 :ec 5 :el 8} "    "] 
+   [:keyword @{:bc 5 :bl 8 :ec 7 :el 8} ":b"] 
+   [:whitespace @{:bc 7 :bl 8 :ec 8 :el 8} " "] 
+   [:number @{:bc 8 :bl 8 :ec 9 :el 8} "2"]]
 
   (-> (j/left expected-expr-zloc)
       j/node)
   # =>
-  '(:whitespace @{:bc 1 :bl 7 :ec 3 :el 7} "  ")
+  [:whitespace @{:bc 1 :bl 7 :ec 3 :el 7} "  "]
 
   (def src
     (string "(comment"                eol
@@ -2741,7 +2747,7 @@
 
   (j/node ti-zloc)
   # =>
-  '(:comment @{:bc 3 :bl 4 :ec 16 :el 4} "# => @[:a :b]")
+  [:comment @{:bc 3 :bl 4 :ec 16 :el 4} "# => @[:a :b]"]
 
   (r/find-expected-expr ti-zloc)
   # =>
@@ -2997,93 +3003,93 @@
 (comment
 
   (def src
-    (string "(require \"json\")" eol
+    (string `(require "json")` eol
             eol
-            "(defn my-fn"        eol
-            "  [x]"              eol
-            "  (+ x 1))"         eol
+            "(defn my-fn"      eol
+            "  [x]"            eol
+            "  (+ x 1))"       eol
             eol
-            "(comment"           eol
+            "(comment"         eol
             eol
-            "  (def a 1)"        eol
+            "  (def a 1)"      eol
             eol
-            "  (put @{} :a 2)"   eol
-            "  # =>"             eol
-            "  @{:a 2}"          eol
+            "  (put @{} :a 2)" eol
+            "  # =>"           eol
+            "  @{:a 2}"        eol
             eol
-            "  (my-fn 1)"        eol
-            "  # =>"             eol
-            "  2"                eol
+            "  (my-fn 1)"      eol
+            "  # =>"           eol
+            "  2"              eol
             eol
-            "  )"                eol
+            "  )"              eol
             eol
-            "(defn your-fn"      eol
-            "  [y]"              eol
-            "  (* y y))"         eol
+            "(defn your-fn"    eol
+            "  [y]"            eol
+            "  (* y y))"       eol
             eol
-            "(comment"           eol
+            "(comment"         eol
             eol
-            "  (your-fn 3)"      eol
-            "  # =>"             eol
-            "  9"                eol
+            "  (your-fn 3)"    eol
+            "  # =>"           eol
+            "  9"              eol
             eol
-            "  (def b 1)"        eol
+            "  (def b 1)"      eol
             eol
-            "  (+ b 1)"          eol
-            "  # =>"             eol
-            "  2"                eol
+            "  (+ b 1)"        eol
+            "  # =>"           eol
+            "  2"              eol
             eol
-            "  (def c 2)"        eol
+            "  (def c 2)"      eol
             eol
-            "  )"                eol
+            "  )"              eol
             ))
 
   (r/rewrite src)
   # =>
-  (string                        eol
-                                 `(require "json")`     eol
-                                 eol
-                                 "(defn my-fn"          eol
-                                 "  [x]"                eol
-                                 "  (+ x 1))"           eol
-                                 eol
-                                 " "                    eol
-                                 eol
-                                 "  (def a 1)"          eol
-                                 eol
-                                 "  (_verify/is"        eol
-                                 "  (put @{} :a 2)"     eol
-                                 "  # =>"               eol
-                                 `  @{:a 2} "line-12")` eol
-                                 eol
-                                 "  (_verify/is"        eol
-                                 "  (my-fn 1)"          eol
-                                 "  # =>"               eol
-                                 `  2 "line-16")`       eol
-                                 eol
-                                 "  :smile"             eol
-                                 eol
-                                 "(defn your-fn"        eol
-                                 "  [y]"                eol
-                                 "  (* y y))"           eol
-                                 eol
-                                 " "                    eol
-                                 eol
-                                 "  (_verify/is"        eol
-                                 "  (your-fn 3)"        eol
-                                 "  # =>"               eol
-                                 `  9 "line-28")`       eol
-                                 eol
-                                 "  (def b 1)"          eol
-                                 eol
-                                 "  (_verify/is"        eol
-                                 "  (+ b 1)"            eol
-                                 "  # =>"               eol
-                                 `  2 "line-34")`       eol
-                                 eol
-                                 "  (def c 2)"          eol
-                                 eol
-                                 "  :smile"             eol)
+  (string eol
+          `(require "json")`     eol
+          eol
+          "(defn my-fn"          eol
+          "  [x]"                eol
+          "  (+ x 1))"           eol
+          eol
+          " "                    eol
+          eol
+          "  (def a 1)"          eol
+          eol
+          "  (_verify/is"        eol
+          "  (put @{} :a 2)"     eol
+          "  # =>"               eol
+          `  @{:a 2} "line-12")` eol
+          eol
+          "  (_verify/is"        eol
+          "  (my-fn 1)"          eol
+          "  # =>"               eol
+          `  2 "line-16")`       eol
+          eol
+          "  :smile"             eol
+          eol
+          "(defn your-fn"        eol
+          "  [y]"                eol
+          "  (* y y))"           eol
+          eol
+          " "                    eol
+          eol
+          "  (_verify/is"        eol
+          "  (your-fn 3)"        eol
+          "  # =>"               eol
+          `  9 "line-28")`       eol
+          eol
+          "  (def b 1)"          eol
+          eol
+          "  (_verify/is"        eol
+          "  (+ b 1)"            eol
+          "  # =>"               eol
+          `  2 "line-34")`       eol
+          eol
+          "  (def c 2)"          eol
+          eol
+          "  :smile"             eol)
 
   )
 
@@ -3112,30 +3118,29 @@
 
   (r/rewrite src)
   # =>
-  (string                   eol
-                            " "               eol
-                            eol
-                            "  (_verify/is"   eol
-                            "  (-> ``"        eol
-                            "      123456789" eol
-                            "      ``"        eol
-                            "      length)"   eol
-                            "  # =>"          eol
-                            `  9 "line-7")`   eol
-                            eol
-                            "  (_verify/is"   eol
-                            "  (->"           eol
-                            "    ``"          eol
-                            "    123456789"   eol
-                            "    ``"          eol
-                            "    length)"     eol
-                            "  # =>"          eol
-                            `  9 "line-15")`  eol
-                            eol
-                            "  :smile")
+  (string  eol
+           " "               eol
+           eol
+           "  (_verify/is"   eol
+           "  (-> ``"        eol
+           "      123456789" eol
+           "      ``"        eol
+           "      length)"   eol
+           "  # =>"          eol
+           `  9 "line-7")`   eol
+           eol
+           "  (_verify/is"   eol
+           "  (->"           eol
+           "    ``"          eol
+           "    123456789"   eol
+           "    ``"          eol
+           "    length)"     eol
+           "  # =>"          eol
+           `  9 "line-15")`  eol
+           eol
+           "  :smile")
 
   )
-
 
 (defn r/rewrite-as-test-file
   [src]
