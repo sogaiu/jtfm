@@ -1,5 +1,6 @@
 #! /usr/bin/env janet
 
+(comment import ./args :prefix "")
 (defn a/parse-args
   [args]
   (def the-args (array ;args))
@@ -52,6 +53,7 @@
           :excludes excludes}))
 
 
+(comment import ./search :prefix "")
 (def s/sep
   (if (= :windows (os/which))
     `\`
@@ -159,6 +161,8 @@
   [all-results hit-paths])
 
 
+(comment import ./rewrite :prefix "")
+(comment import ./jipper :prefix "")
 # bl - begin line
 # bc - begin column
 # el - end line
@@ -2314,6 +2318,7 @@
   )
 
 
+(comment import ./verify :prefix "")
 # XXX: try to put in file?  had trouble originally when working on
 #      judge-gen.  may be will have more luck?
 (def v/as-string
@@ -3157,6 +3162,7 @@
   )
 
 
+(comment import ./utils :prefix "")
 (defn u/parse-path
   [path]
   (def revcap-peg
@@ -3258,7 +3264,7 @@
 (def test-file-ext ".jtfm")
 
 (defn make-tests
-  [filepath]
+  [filepath &opt opts]
   (def src (slurp filepath))
   (def test-src (r/rewrite-as-test-file src))
   (unless test-src
@@ -3266,7 +3272,8 @@
   #
   (def [fdir fname] (u/parse-path filepath))
   (def test-filepath (string fdir "_" fname test-file-ext))
-  (when (os/stat test-filepath :mode)
+  (when (and (not (get opts :overwrite))
+             (os/stat test-filepath :mode))
     (eprintf "test file already exists for: %p" filepath)
     (break nil))
   #
@@ -3315,9 +3322,10 @@
     (print)))
 
 (defn make-run-report
-  [filepath]
+  [filepath &opt opts]
+  (default opts @{})
   # create test source
-  (def result (make-tests filepath))
+  (def result (make-tests filepath opts))
   (unless result
     (eprintf "failed to create test file for: %p" filepath)
     (break nil))
@@ -3356,7 +3364,7 @@
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
       (print path)
-      (def result (make-run-report path))
+      (def result (make-run-report path opts))
       (cond
         (= :no-tests result)
         # XXX: the 2 newlines here are cosmetic
