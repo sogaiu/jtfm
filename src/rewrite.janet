@@ -7,6 +7,9 @@
 # # before =>
 # # => after
 # # before => after
+#
+# further constraint that neither `before` nor `after` should contain
+# a hash character (#)
 
 (defn find-test-indicator
   [zloc]
@@ -20,7 +23,9 @@
                                                     (capture (to "=>"))
                                                     "=>"
                                                     (capture (thru -1)))
-                                         content)]
+                                         content)
+                              no-hash-left (nil? (string/find "#" l))
+                              no-hash-right (nil? (string/find "#" r))]
                        (do
                          (set label-left (string/trim l))
                          (set label-right (string/trim r))
