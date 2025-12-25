@@ -2500,10 +2500,7 @@
 
 (comment
 
-  (def eol
-    (if (= :windows (os/which))
-      "\r\n"
-      "\n"))
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
 
   (def src
     (string "(+ 1 1)" eol
@@ -2613,8 +2610,7 @@
   # =>
   [:comment @{:bc 3 :bl 6 :ec 7 :el 6} "# =>"]
 
-  (def test-expr-zloc
-    (r/find-test-expr ti-zloc))
+  (def test-expr-zloc (r/find-test-expr ti-zloc))
 
   (j/node test-expr-zloc)
   # =>
@@ -2723,19 +2719,18 @@
   # =>
   [:comment @{:bc 3 :bl 6 :ec 7 :el 6} "# =>"]
 
-  (def expected-expr-zloc
-    (r/find-expected-expr ti-zloc))
+  (def expected-expr-zloc (r/find-expected-expr ti-zloc))
 
   (j/node expected-expr-zloc)
   # =>
-  [:table @{:bc 3 :bl 7 :ec 10 :el 8} 
-   [:keyword @{:bc 5 :bl 7 :ec 7 :el 7} ":a"] 
-   [:whitespace @{:bc 7 :bl 7 :ec 8 :el 7} " "] 
-   [:number @{:bc 8 :bl 7 :ec 9 :el 7} "1"] 
-   [:whitespace @{:bc 9 :bl 7 :ec 1 :el 8} "\n"] 
-   [:whitespace @{:bc 1 :bl 8 :ec 5 :el 8} "    "] 
-   [:keyword @{:bc 5 :bl 8 :ec 7 :el 8} ":b"] 
-   [:whitespace @{:bc 7 :bl 8 :ec 8 :el 8} " "] 
+  [:table @{:bc 3 :bl 7 :ec 10 :el 8}
+   [:keyword @{:bc 5 :bl 7 :ec 7 :el 7} ":a"]
+   [:whitespace @{:bc 7 :bl 7 :ec 8 :el 7} " "]
+   [:number @{:bc 8 :bl 7 :ec 9 :el 7} "1"]
+   [:whitespace @{:bc 9 :bl 7 :ec 1 :el 8} "\n"]
+   [:whitespace @{:bc 1 :bl 8 :ec 5 :el 8} "    "]
+   [:keyword @{:bc 5 :bl 8 :ec 7 :el 8} ":b"]
+   [:whitespace @{:bc 7 :bl 8 :ec 8 :el 8} " "]
    [:number @{:bc 8 :bl 8 :ec 9 :el 8} "2"]]
 
   (-> (j/left expected-expr-zloc)
@@ -2803,8 +2798,7 @@
 (defn r/find-test-exprs
   [ti-zloc]
   # look for a test expression
-  (def test-expr-zloc
-    (r/find-test-expr ti-zloc))
+  (def test-expr-zloc (r/find-test-expr ti-zloc))
   (case test-expr-zloc
     :no-test-expression
     (break [nil nil])
@@ -2813,8 +2807,7 @@
     (errorf "unexpected result from `find-test-expr`: %p"
             test-expr-zloc))
   # look for an expected value expression
-  (def expected-expr-zloc
-    (r/find-expected-expr ti-zloc))
+  (def expected-expr-zloc (r/find-expected-expr ti-zloc))
   (case expected-expr-zloc
     :no-expected-expression
     (break [test-expr-zloc nil])
@@ -2828,10 +2821,7 @@
 (defn r/wrap-as-test-call
   [start-zloc end-zloc test-label]
   # XXX: hack - not sure if robust enough
-  (def eol-str
-    (if (= :windows (os/which))
-      "\r\n"
-      "\n"))
+  (def eol-str (if (= :windows (os/which)) "\r\n" "\n"))
   (-> (j/wrap start-zloc [:tuple @{}] end-zloc)
       # newline important for preserving long strings
       (j/insert-child [:whitespace @{} eol-str])
@@ -2851,12 +2841,11 @@
   (var found-test nil)
   # process comment block content
   (while (not (j/end? curr-zloc))
-    (def [ti-zloc label-left label-right]
-      (r/find-test-indicator curr-zloc))
-    (unless ti-zloc
+    (def [ti-zloc label-left label-right] (r/find-test-indicator curr-zloc))
+    (when (not ti-zloc)
       (break))
-    (def [test-expr-zloc expected-expr-zloc]
-      (r/find-test-exprs ti-zloc))
+    #
+    (def [test-expr-zloc expected-expr-zloc] (r/find-test-exprs ti-zloc))
     (set curr-zloc
          (if (or (nil? test-expr-zloc)
                  (nil? expected-expr-zloc))
@@ -2980,10 +2969,7 @@
   [src]
   (var changed nil)
   # XXX: hack - not sure if robust enough
-  (def eol-str
-    (if (= :windows (os/which))
-      "\r\n"
-      "\n"))
+  (def eol-str (if (= :windows (os/which)) "\r\n" "\n"))
   (var curr-zloc
     (-> (j/par src)
         j/zip-down
@@ -3009,6 +2995,7 @@
                (j/unwrap rewritten-zloc))
              comment-zloc))
       (break)))
+  #
   (when changed
     (-> curr-zloc
         j/root
@@ -3161,10 +3148,7 @@
   (when (not (empty? src))
     (when-let [rewritten (r/rewrite src)]
       # XXX: hack - not sure if robust enough
-      (def eol-str
-        (if (= :windows (os/which))
-          "\r\n"
-          "\n"))
+      (def eol-str (if (= :windows (os/which)) "\r\n" "\n"))
       (string v/as-string
               eol-str
               "(_verify/start-tests)"
@@ -3175,15 +3159,6 @@
               eol-str
               "(_verify/report)"
               eol-str))))
-
-# no tests so won't be executed
-(comment
-
-  (->> (slurp "./to-test-dogfood.janet")
-       r/rewrite-as-test-file
-       (spit "./sample-test-dogfood.janet"))
-
-  )
 
 
 (comment import ./utils :prefix "")
