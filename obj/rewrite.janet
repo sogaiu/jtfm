@@ -13,9 +13,9 @@
 #
 # i.e. inside a comment form, a single test consists of:
 #
-# * a test expression        -  `(+ 1 1)` above
-# * a test indicator         - `# =>` above
-# * an expected expression   - `2` above
+# * a test expression        - `(+ 1 1)`
+# * a test indicator         - `# =>`
+# * an expected expression   - `2`
 #
 # there can be one or more tests within a comment form.
 
