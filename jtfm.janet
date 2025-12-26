@@ -2840,6 +2840,31 @@
   #
   [test-expr-zloc expected-expr-zloc])
 
+(comment
+
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
+
+  (def src
+    (string "(+ 1 1)" eol
+            "# =>"    eol
+            "2"))
+
+  (def [ti-zloc _ _]
+    (r/find-test-indicator (-> (j/par src)
+                             j/zip-down)))
+
+  (def [t-zloc e-zloc] (r/find-exprs ti-zloc))
+
+  (j/gen (j/node t-zloc))
+  # =>
+  "(+ 1 1)"
+
+  (j/gen (j/node e-zloc))
+  # =>
+  "2"
+
+  )
+
 (defn r/wrap-as-test-call
   [start-zloc end-zloc test-label]
   # XXX: hack - not sure if robust enough
@@ -2855,6 +2880,38 @@
       # add location info argument
       (j/append-child [:whitespace @{} " "])
       (j/append-child [:string @{} test-label])))
+
+(comment
+
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
+
+  (def src
+    (string "(+ 1 1)" eol
+            "# =>"    eol
+            "2"))
+
+  (def [ti-zloc _ _]
+    (r/find-test-indicator (-> (j/par src)
+                             j/zip-down)))
+
+  (def [t-zloc e-zloc] (r/find-exprs ti-zloc))
+
+  (let [left-of-t-zloc (j/left t-zloc)
+        start-zloc (match (j/node left-of-t-zloc)
+                     [:whitespace]
+                     left-of-t-zloc
+                     #
+                     t-zloc)
+        w-zloc (r/wrap-as-test-call start-zloc e-zloc "\n\"hi!\"")]
+    (j/gen (j/node w-zloc)))
+  # =>
+  (string "(_verify/is\n"
+          "(+ 1 1)\n"
+          "# =>\n"
+          "2 \n"
+          `"hi!")`)
+
+  )
 
 (defn r/rewrite-comment-zloc
   [comment-zloc]
