@@ -349,7 +349,7 @@
 
   )
 
-(defn find-test-exprs
+(defn find-exprs
   [ti-zloc]
   # look for a test expression
   (def test-expr-zloc (find-test-expr ti-zloc))
@@ -399,7 +399,7 @@
     (when (not ti-zloc)
       (break))
     #
-    (def [test-expr-zloc expected-expr-zloc] (find-test-exprs ti-zloc))
+    (def [test-expr-zloc expected-expr-zloc] (find-exprs ti-zloc))
     (set curr-zloc
          (if (or (nil? test-expr-zloc)
                  (nil? expected-expr-zloc))
