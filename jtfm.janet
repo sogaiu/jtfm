@@ -2608,6 +2608,8 @@
 
 (comment
 
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
+
   (def src
     (string "(comment"         eol
             eol
@@ -2715,6 +2717,8 @@
     :unexpected-result))
 
 (comment
+
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
 
   (def src
     (string "(comment"         eol
@@ -2899,6 +2903,8 @@
 
 (comment
 
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
+
   (def src
     (string "(comment"         eol
             eol
@@ -2947,6 +2953,8 @@
       j/gen))
 
 (comment
+
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
 
   (def src
     (string "(comment"          eol
@@ -3020,6 +3028,8 @@
         j/gen)))
 
 (comment
+
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
 
   (def src
     (string `(require "json")` eol
@@ -3113,6 +3123,8 @@
   )
 
 (comment
+
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
 
   # https://github.com/sogaiu/judge-gen/issues/1
   (def src
