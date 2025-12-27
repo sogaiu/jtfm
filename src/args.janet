@@ -45,7 +45,37 @@
       #
       (errorf "unexpected result parsing: %n" args)))
   #
+  (defn merge-indexed
+    [left right]
+    (default left [])
+    (default right [])
+    (distinct [;left ;right]))
+  #
   (merge opts
-         {:includes includes
-          :excludes excludes}))
+         {:includes (merge-indexed includes (get opts :includes))
+          :excludes (merge-indexed excludes (get opts :excludes))}))
+
+(comment
+
+  (parse-args ["src/main.janet"])
+  # =>
+  @{:excludes @[]
+    :includes @["src/main.janet"]}
+
+  (parse-args ["-h"])
+  # =>
+  @{:help true}
+
+  (parse-args ["{:overwrite true}" "src/main.janet"])
+  # =>
+  @{:excludes @[]
+    :includes @["src/main.janet"]
+    :overwrite true}
+
+  (parse-args [`{:excludes ["src/args.janet"]}` "src/main.janet"])
+  # =>
+  @{:excludes @["src/args.janet"]
+    :includes @["src/main.janet"]}
+
+  )
 
