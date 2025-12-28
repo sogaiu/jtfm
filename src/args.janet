@@ -12,6 +12,12 @@
                  (not= :file (os/stat conf-file :mode))))
     (break @{:show-help true}))
   #
+  (when (or (= head "-v") (= head "--version")
+            # might have been invoked with no paths in repository root
+            (and (not head)
+                 (not= :file (os/stat conf-file :mode))))
+    (break @{:show-version true}))
+  #
   (def opts
     (if head
       (if-not (and (string/has-prefix? "{" head)

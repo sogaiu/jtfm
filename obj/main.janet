@@ -157,6 +157,10 @@
     (print usage)
     (os/exit 0))
   #
+  (when (get opts :show-version)
+    (print version)
+    (os/exit 0))
+  #
   (def includes (get opts :includes))
   (def excludes (get opts :excludes))
   #

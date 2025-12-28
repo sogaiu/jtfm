@@ -15,6 +15,12 @@
                  (not= :file (os/stat conf-file :mode))))
     (break @{:show-help true}))
   #
+  (when (or (= head "-v") (= head "--version")
+            # might have been invoked with no paths in repository root
+            (and (not head)
+                 (not= :file (os/stat conf-file :mode))))
+    (break @{:show-version true}))
+  #
   (def opts
     (if head
       (if-not (and (string/has-prefix? "{" head)
@@ -3469,6 +3475,10 @@
   #
   (when (get opts :show-help)
     (print usage)
+    (os/exit 0))
+  #
+  (when (get opts :show-version)
+    (print version)
     (os/exit 0))
   #
   (def includes (get opts :includes))
