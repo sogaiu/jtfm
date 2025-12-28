@@ -89,114 +89,6 @@
   )
 
 
-(comment import ./search :prefix "")
-(def s/sep
-  (if (= :windows (os/which))
-    `\`
-    "/"))
-
-(defn s/find-files
-  [dir &opt pred]
-  (default pred identity)
-  (def paths @[])
-  (defn helper
-    [a-dir]
-    (each path (os/dir a-dir)
-      (def sub-path
-        (string a-dir s/sep path))
-      (case (os/stat sub-path :mode)
-        :directory
-        (when (not= path ".git")
-          (when (not (os/stat (string sub-path s/sep ".gitrepo")))
-            (helper sub-path)))
-        #
-        :file
-        (when (pred sub-path)
-          (array/push paths sub-path)))))
-  (helper dir)
-  paths)
-
-(comment
-
-  (s/find-files "." |(string/has-suffix? ".janet" $))
-
-  )
-
-(defn s/clean-end-of-path
-  [path a-sep]
-  (when (one? (length path))
-    (break path))
-  (if (string/has-suffix? a-sep path)
-    (string/slice path 0 -2)
-    path))
-
-(comment
-
-  (s/clean-end-of-path "hello/" "/")
-  # =>
-  "hello"
-
-  (s/clean-end-of-path "/" "/")
-  # =>
-  "/"
-
-  )
-
-(defn s/has-janet-shebang?
-  [path]
-  (with [f (file/open path)]
-    (def first-line (file/read f :line))
-    (when first-line
-      (and (string/find "env" first-line)
-           (string/find "janet" first-line)))))
-
-(defn s/collect-paths
-  [includes &opt pred]
-  (default pred identity)
-  (def filepaths @[])
-  # collect file and directory paths
-  (each thing includes
-    (def apath (s/clean-end-of-path thing s/sep))
-    (def mode (os/stat apath :mode))
-    # XXX: should :link be supported?
-    (cond
-      (= :file mode)
-      (array/push filepaths apath)
-      #
-      (= :directory mode)
-      (array/concat filepaths (s/find-files apath pred))
-      #
-      (do
-        (eprintf "No such file or not an ordinary file or directory: %s"
-                 apath)
-        (os/exit 1))))
-  #
-  filepaths)
-
-(defn s/search-paths
-  [query-fn opts]
-  (def {:name name :paths src-paths} opts)
-  #
-  (def all-results @[])
-  (def hit-paths @[])
-  (each path src-paths
-    (def src (slurp path))
-    (when (pos? (length src))
-      (when (or (not name)
-                (string/find name src))
-        (array/push hit-paths path)
-        (def results
-          (try
-            (query-fn src opts)
-            ([e]
-              (eprintf "search failed for: %s" path))))
-        (when (and results (not (empty? results)))
-          (each item results
-            (array/push all-results (merge item {:path path})))))))
-  #
-  [all-results hit-paths])
-
-
 (comment import ./rewrite :prefix "")
 (comment import ./jipper :prefix "")
 # bl - begin line
@@ -2407,9 +2299,11 @@
                       :red 31
                       :white 37
                       :yellow 33)]
-      (prin (string "\e[" color-num "m"
-                    msg
-                    "\e[0m"))))
+      (def real-msg
+        (if (os/getenv "NO_COLOR")
+          msg
+          (string "\e[" color-num "m" msg "\e[0m")))
+      (prin real-msg)))
 
   (defn _verify/dashes
     [&opt n]
@@ -3283,6 +3177,162 @@
               "(_verify/report)"
               eol-str))))
 
+(defn r/patch-file
+  [filepath line value]
+  (def src (slurp filepath))
+  (when (empty? src)
+    (eprintf "no content for file: %s" filepath)
+    (break nil))
+  #
+  (def zloc
+    (try (-> src
+             j/par
+             j/zip-down)
+      ([e] (eprint e)
+           (errorf "failed to create zipper for: %s" filepath))))
+  (def ti-zloc
+    (j/search-from zloc
+                   |(when-let [node (j/node $)
+                               [n-type {:bl bl} _] node]
+                      (and (= :comment n-type)
+                           (= bl line)))))
+  (when (not ti-zloc)
+    (eprintf "failed to find test indicator at line: %d" line)
+    (break nil))
+  #
+  (def ee-zloc (r/find-expected-expr ti-zloc))
+  (def new-node
+    (try (-> (j/par value)
+             j/zip-down
+             j/node)
+      ([e] (eprint e)
+           (errorf "failed to create node for value: %n" value))))
+  (def new-zloc (j/replace ee-zloc new-node))
+  (when (not new-zloc)
+    (eprintf "failed to replace with new node: %n" new-node)
+    (break nil))
+  #
+  (def new-src
+    (try (-> new-zloc
+             j/root
+             j/gen)
+      ([e] (eprint e)
+           (errorf "failed to create new src for: %n" new-node))))
+  (when (not new-src)
+    (eprintf "unexpected falsy value for new-src")
+    (break nil))
+  #
+  (spit filepath new-src)
+  true)
+
+
+(comment import ./search :prefix "")
+(def s/sep
+  (if (= :windows (os/which))
+    `\`
+    "/"))
+
+(defn s/find-files
+  [dir &opt pred]
+  (default pred identity)
+  (def paths @[])
+  (defn helper
+    [a-dir]
+    (each path (os/dir a-dir)
+      (def sub-path
+        (string a-dir s/sep path))
+      (case (os/stat sub-path :mode)
+        :directory
+        (when (not= path ".git")
+          (when (not (os/stat (string sub-path s/sep ".gitrepo")))
+            (helper sub-path)))
+        #
+        :file
+        (when (pred sub-path)
+          (array/push paths sub-path)))))
+  (helper dir)
+  paths)
+
+(comment
+
+  (s/find-files "." |(string/has-suffix? ".janet" $))
+
+  )
+
+(defn s/clean-end-of-path
+  [path a-sep]
+  (when (one? (length path))
+    (break path))
+  (if (string/has-suffix? a-sep path)
+    (string/slice path 0 -2)
+    path))
+
+(comment
+
+  (s/clean-end-of-path "hello/" "/")
+  # =>
+  "hello"
+
+  (s/clean-end-of-path "/" "/")
+  # =>
+  "/"
+
+  )
+
+(defn s/has-janet-shebang?
+  [path]
+  (with [f (file/open path)]
+    (def first-line (file/read f :line))
+    (when first-line
+      (and (string/find "env" first-line)
+           (string/find "janet" first-line)))))
+
+(defn s/collect-paths
+  [includes &opt pred]
+  (default pred identity)
+  (def filepaths @[])
+  # collect file and directory paths
+  (each thing includes
+    (def apath (s/clean-end-of-path thing s/sep))
+    (def mode (os/stat apath :mode))
+    # XXX: should :link be supported?
+    (cond
+      (= :file mode)
+      (array/push filepaths apath)
+      #
+      (= :directory mode)
+      (array/concat filepaths (s/find-files apath pred))
+      #
+      (do
+        (eprintf "No such file or not an ordinary file or directory: %s"
+                 apath)
+        (os/exit 1))))
+  #
+  filepaths)
+
+(defn s/search-paths
+  [query-fn opts]
+  (def {:name name :paths src-paths} opts)
+  #
+  (def all-results @[])
+  (def hit-paths @[])
+  (each path src-paths
+    (def src (slurp path))
+    (when (pos? (length src))
+      (when (or (not name)
+                (string/find name src))
+        (array/push hit-paths path)
+        (def results
+          (try
+            (query-fn src opts)
+            ([e]
+              (eprintf "search failed for: %s" path))))
+        (when (and results (not (empty? results)))
+          (each item results
+            (array/push all-results (merge item {:path path})))))))
+  #
+  [all-results hit-paths])
+
 
 (comment import ./utils :prefix "")
 (defn u/parse-path
@@ -3325,7 +3375,7 @@
 
 ###########################################################################
 
-(def version "2025-12-28_10-39-48")
+(def version "2025-12-29_01-25-41")
 
 (def usage
   ``
@@ -3391,7 +3441,7 @@
   [filepath &opt opts]
   (def src (slurp filepath))
   (def test-src (r/rewrite-as-test-file src))
-  (unless test-src
+  (when (not test-src)
     (break :no-tests))
   #
   (def [fdir fname] (u/parse-path filepath))
@@ -3406,14 +3456,21 @@
   test-filepath)
 
 (defn run-tests
-  [test-filepath]
+  [test-filepath &opt opts]
+  (default opts {})
+  (def {:no-color no-color} opts)
+  (def ose-flags (if no-color :pe :p))
   (try
     (with [of (file/temp)]
       (with [ef (file/temp)]
-        (let [cmd
-              # prevents any contained `main` functions from executing
+        (let [# prevents any contained `main` functions from executing
+              cmd
               ["janet" "-e" (string "(dofile `" test-filepath "`)")]
-              ecode (os/execute cmd :p {:out of :err ef})]
+              # when trying to update, use NO_COLOR
+              ecode
+              (os/execute cmd ose-flags
+                          (merge {:out of :err ef}
+                                 {"NO_COLOR" (when no-color "1")}))]
           (when (not (zero? ecode))
             (eprintf "non-zero exit code: %p" ecode))
           #
@@ -3445,12 +3502,77 @@
     (print "no test output...possibly no tests")
     (print)))
 
-(defn make-run-report
+# sample output:
+
+``
+--(1)--
+
+failed:
+line-4
+
+form:
+(+ 1 2)
+
+expected:
+2
+
+actual:
+3
+
+--(2)--
+
+failed:
+line-8
+
+form:
+(- 1 1)
+
+expected:
+1
+
+actual:
+0
+
+------------------------------------------------------------
+0 of 2 passed
+------------------------------------------------------------
+``
+
+# XXX: work on "output as data" later
+(defn parse-out
+  [out]
+  # see verify.janet
+  (def dashes (string/repeat "-" 60))
+  # remove from dashes onwards and trim the left end of the output
+  (def dashes-idx (string/find dashes out))
+  (def truncated (string/triml (string/slice out 0 dashes-idx)))
+  (def m (peg/match ~(some (sequence "--(" :d+ ")--"
+                                     (thru "\n")
+                                     (thru "\nfailed:")
+                                     (thru "\nline-")
+                                     (number :d+)
+                                     (thru "\n")
+                                     (thru "\nform:")
+                                     (thru "\n")
+                                     (thru "\nexpected:")
+                                     (thru "\nactual:")
+                                     (thru "\n")
+                                     (capture (to "\n"))
+                                     (thru "\n")
+                                     (thru "\n")
+                                     (choice (look 0 "--(")
+                                             -1)))
+                    truncated))
+  (if m
+    (table ;m)
+    nil))
+
+(defn make-and-run
   [filepath &opt opts]
   (default opts @{})
   # create test source
   (def result (make-tests filepath opts))
-  (unless result
+  (when (not result)
     (eprintf "failed to create test file for: %p" filepath)
     (break nil))
   #
@@ -3459,13 +3581,50 @@
   #
   (def test-filepath result)
   # run tests and collect output
-  (def [out err ecode] (run-tests test-filepath))
+  [test-filepath ;(run-tests test-filepath opts)])
+
+(defn make-run-report
+  [filepath &opt opts]
+  # run tests and collect output
+  (def [test-filepath out err ecode] (make-and-run filepath opts))
   # print out results
   (report out err)
   # finish off
   (when (zero? ecode)
     (os/rm test-filepath)
     true))
+
+(defn make-run-update
+  [filepath &opt opts]
+  # run tests and collect output
+  (def [test-filepath out err ecode] (make-and-run filepath opts))
+  # successful run means no tests to update
+  (when (zero? ecode)
+    (os/rm test-filepath)
+    (break true))
+  #
+  (def parsed (parse-out out))
+  (when (not parsed)
+    (eprintf "failed to parse test output: %s" out)
+    (break nil))
+  #
+  (def lines-tbl parsed)
+  (def line-nums (sort (keys lines-tbl)))
+  (def line-num (get line-nums 0))
+  (def new-value (get lines-tbl line-num))
+  (when (not new-value)
+    (eprintf "failed to find actual value for line: %d" line-num)
+    (break nil))
+  #
+  (printf "Found test to update in file: %s at line: %d"
+          filepath line-num)
+  (def ret (r/patch-file filepath line-num new-value))
+  (when (not ret)
+    (eprintf "failed to patch file: %s" filepath)
+    (break nil))
+  #
+  (os/rm test-filepath)
+  (break :stop))
 
 ########################################################################
 
@@ -3481,19 +3640,30 @@
     (print version)
     (os/exit 0))
   #
+  (when (os/getenv "NO_COLOR")
+    (put opts :no-color true))
+  #
   (def includes (get opts :includes))
   (def excludes (get opts :excludes))
   #
   (def src-filepaths
     (s/collect-paths includes |(or (string/has-suffix? ".janet" $)
                                    (s/has-janet-shebang? $))))
-  # generate tests, run tests, and report
+  # generate tests, run tests, and update / report
   (each path src-filepaths
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
       (print path)
-      (def result (make-run-report path opts))
+      (def result
+        (if (get opts :update-first)
+          (make-run-update path (merge opts {:no-color true}))
+          (make-run-report path opts)))
       (cond
+        (= :stop result)
+        (do
+          (printf "Test updated in: %s" path)
+          (os/exit 0))
+        #
         (= :no-tests result)
         # XXX: the 2 newlines here are cosmetic
         (eprintf "* no tests detected for: %p\n\n" path)
@@ -3509,6 +3679,7 @@
         (do
           (eprintf "Unexpected result %p for: %p" result path)
           (os/exit 1)))))
+  #
   (printf "All tests completed successfully in %d file(s)."
           (length src-filepaths)))
 

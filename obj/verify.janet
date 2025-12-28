@@ -50,9 +50,11 @@
                       :red 31
                       :white 37
                       :yellow 33)]
-      (prin (string "\e[" color-num "m"
-                    msg
-                    "\e[0m"))))
+      (def real-msg
+        (if (os/getenv "NO_COLOR")
+          msg
+          (string "\e[" color-num "m" msg "\e[0m")))
+      (prin real-msg)))
 
   (defn _verify/dashes
     [&opt n]

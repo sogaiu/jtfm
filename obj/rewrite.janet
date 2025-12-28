@@ -783,3 +783,51 @@
               "(_verify/report)"
               eol-str))))
 
+(defn r/patch-file
+  [filepath line value]
+  (def src (slurp filepath))
+  (when (empty? src)
+    (eprintf "no content for file: %s" filepath)
+    (break nil))
+  #
+  (def zloc
+    (try (-> src
+             j/par
+             j/zip-down)
+      ([e] (eprint e)
+           (errorf "failed to create zipper for: %s" filepath))))
+  (def ti-zloc
+    (j/search-from zloc
+                   |(when-let [node (j/node $)
+                               [n-type {:bl bl} _] node]
+                      (and (= :comment n-type)
+                           (= bl line)))))
+  (when (not ti-zloc)
+    (eprintf "failed to find test indicator at line: %d" line)
+    (break nil))
+  #
+  (def ee-zloc (r/find-expected-expr ti-zloc))
+  (def new-node
+    (try (-> (j/par value)
+             j/zip-down
+             j/node)
+      ([e] (eprint e)
+           (errorf "failed to create node for value: %n" value))))
+  (def new-zloc (j/replace ee-zloc new-node))
+  (when (not new-zloc)
+    (eprintf "failed to replace with new node: %n" new-node)
+    (break nil))
+  #
+  (def new-src
+    (try (-> new-zloc
+             j/root
+             j/gen)
+      ([e] (eprint e)
+           (errorf "failed to create new src for: %n" new-node))))
+  (when (not new-src)
+    (eprintf "unexpected falsy value for new-src")
+    (break nil))
+  #
+  (spit filepath new-src)
+  true)
+
