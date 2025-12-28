@@ -1,11 +1,11 @@
-#! /usr/bin/env janet
-
 (import ./args :prefix "")
 (import ./search :prefix "")
 (import ./rewrite :prefix "")
 (import ./utils :prefix "")
 
 ###########################################################################
+
+(def version "DEVEL")
 
 (def usage
   ``

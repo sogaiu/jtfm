@@ -1,11 +1,11 @@
-#! /usr/bin/env janet
-
 (import ./args :as a)
 (import ./search :as s)
 (import ./rewrite :as r)
 (import ./utils :as u)
 
 ###########################################################################
+
+(def version "DEVEL")
 
 (def usage
   ``
