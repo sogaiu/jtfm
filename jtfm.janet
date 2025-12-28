@@ -13,7 +13,7 @@
             # might have been invoked with no paths in repository root
             (and (not head)
                  (not= :file (os/stat conf-file :mode))))
-    (break @{:help true}))
+    (break @{:show-help true}))
   #
   (def opts
     (if head
@@ -67,7 +67,7 @@
 
   (a/parse-args ["-h"])
   # =>
-  @{:help true}
+  @{:show-help true}
 
   (a/parse-args ["{:overwrite true}" "src/main.janet"])
   # =>
@@ -3319,7 +3319,7 @@
 
 ###########################################################################
 
-(def version "2025-12-28_10-16-10")
+(def version "2025-12-28_10-39-48")
 
 (def usage
   ``
@@ -3467,7 +3467,7 @@
   [& args]
   (def opts (a/parse-args (drop 1 args)))
   #
-  (when (get opts :help)
+  (when (get opts :show-help)
     (print usage)
     (os/exit 0))
   #

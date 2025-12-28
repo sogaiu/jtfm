@@ -153,7 +153,7 @@
   [& args]
   (def opts (a/parse-args (drop 1 args)))
   #
-  (when (get opts :help)
+  (when (get opts :show-help)
     (print usage)
     (os/exit 0))
   #

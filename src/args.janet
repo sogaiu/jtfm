@@ -10,7 +10,7 @@
             # might have been invoked with no paths in repository root
             (and (not head)
                  (not= :file (os/stat conf-file :mode))))
-    (break @{:help true}))
+    (break @{:show-help true}))
   #
   (def opts
     (if head
@@ -64,7 +64,7 @@
 
   (parse-args ["-h"])
   # =>
-  @{:help true}
+  @{:show-help true}
 
   (parse-args ["{:overwrite true}" "src/main.janet"])
   # =>
