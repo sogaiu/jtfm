@@ -109,9 +109,9 @@
           (file/seek of :set 0)
           (file/seek ef :set 0)
           #
-          [(file/read of :all)
-           (file/read ef :all)
-           ecode])))
+          [ecode
+           (file/read of :all)
+           (file/read ef :all)])))
     ([e]
       (eprintf "problem executing tests: %p" e)
       [nil nil nil])))
@@ -204,19 +204,22 @@ actual:
   (def result (make-tests filepath opts))
   (when (not result)
     (eprintf "failed to create test file for: %p" filepath)
-    (break nil))
+    (break [nil nil nil nil]))
   #
   (when (= :no-tests result)
-    (break :no-tests))
+    (break [:no-tests nil nil nil]))
   #
   (def test-filepath result)
+  (def [ecode out err] (run-tests test-filepath opts))
   # run tests and collect output
-  [test-filepath ;(run-tests test-filepath opts)])
+  [ecode test-filepath out err])
 
 (defn make-run-report
   [filepath &opt opts]
-  # run tests and collect output
-  (def [test-filepath out err ecode] (make-and-run filepath opts))
+  # try to make and run tests, then collect output
+  (def [ecode test-filepath out err] (make-and-run filepath opts))
+  (when (or (nil? ecode) (= :no-tests ecode))
+    (break ecode))
   # print out results
   (report out err)
   # finish off
@@ -226,8 +229,10 @@ actual:
 
 (defn make-run-update
   [filepath &opt opts]
-  # run tests and collect output
-  (def [test-filepath out err ecode] (make-and-run filepath opts))
+  # try to make and run tests, then collect output
+  (def [ecode test-filepath out err] (make-and-run filepath opts))
+  (when (or (nil? ecode) (= :no-tests ecode))
+    (break ecode))
   # successful run means no tests to update
   (when (zero? ecode)
     (os/rm test-filepath)
