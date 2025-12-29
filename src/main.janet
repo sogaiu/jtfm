@@ -267,9 +267,6 @@ actual:
     (print version)
     (os/exit 0))
   #
-  (when (os/getenv "NO_COLOR")
-    (put opts :no-color true))
-  #
   (def update? (or (get opts :update) (get opts :update-first)))
   #
   (def includes (get opts :includes))

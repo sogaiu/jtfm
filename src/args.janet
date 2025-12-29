@@ -50,6 +50,10 @@
          (array ;(get conf :excludes @[]))])
       #
       (errorf "unexpected result parsing: %n" args)))
+  # XXX: struct has precedence over env var...is that desirable?
+  (when (and (not (false? (get opts :no-color)))
+             (os/getenv "NO_COLOR"))
+    (put opts :no-color true))
   #
   (defn merge-indexed
     [left right]
