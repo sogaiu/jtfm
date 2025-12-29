@@ -3177,47 +3177,64 @@
               "(_verify/report)"
               eol-str))))
 
+(defn r/patch-zloc
+  [a-zloc lines-table]
+  (var zloc a-zloc)
+  (var ok? true)
+  (each line (sort (keys lines-table)) # order important
+    (when (not zloc)
+      (break))
+    #
+    (def ti-zloc
+      (j/search-from zloc
+                     |(when-let [node (j/node $)
+                                 [n-type {:bl bl} _] node]
+                        (and (= :comment n-type)
+                             (= bl line)))))
+    (when (not ti-zloc)
+      (eprintf "failed to find test indicator at line: %d" line)
+      (set ok? false)
+      (break))
+    #
+    (def ee-zloc (r/find-expected-expr ti-zloc))
+    # get value to patch with
+    (def value (get lines-table line))
+    (def new-node
+      (try (-> (j/par value)
+               j/zip-down
+               j/node)
+        ([e] (eprint e)
+             (errorf "failed to create node for value: %n" value))))
+    # patch with value
+    (def new-zloc (j/replace ee-zloc new-node))
+    (when (not new-zloc)
+      (eprintf "failed to replace with new node: %n" new-node)
+      (set ok? false)
+      (break))
+    #
+    (set zloc new-zloc))
+  #
+  (when ok? zloc))
+
 (defn r/patch-file
-  [filepath line value]
+  [filepath lines-table]
   (def src (slurp filepath))
   (when (empty? src)
     (eprintf "no content for file: %s" filepath)
     (break nil))
-  #
+  # prepare and patch
   (def zloc
-    (try (-> src
-             j/par
-             j/zip-down)
+    (try (-> src j/par j/zip-down)
       ([e] (eprint e)
            (errorf "failed to create zipper for: %s" filepath))))
-  (def ti-zloc
-    (j/search-from zloc
-                   |(when-let [node (j/node $)
-                               [n-type {:bl bl} _] node]
-                      (and (= :comment n-type)
-                           (= bl line)))))
-  (when (not ti-zloc)
-    (eprintf "failed to find test indicator at line: %d" line)
-    (break nil))
-  #
-  (def ee-zloc (r/find-expected-expr ti-zloc))
-  (def new-node
-    (try (-> (j/par value)
-             j/zip-down
-             j/node)
-      ([e] (eprint e)
-           (errorf "failed to create node for value: %n" value))))
-  (def new-zloc (j/replace ee-zloc new-node))
+  (def new-zloc (r/patch-zloc zloc lines-table))
   (when (not new-zloc)
-    (eprintf "failed to replace with new node: %n" new-node)
     (break nil))
   #
   (def new-src
-    (try (-> new-zloc
-             j/root
-             j/gen)
+    (try (-> new-zloc j/root j/gen)
       ([e] (eprint e)
-           (errorf "failed to create new src for: %n" new-node))))
+           (errorf "failed to create new src for: %n" ))))
   (when (not new-src)
     (eprintf "unexpected falsy value for new-src")
     (break nil))
@@ -3375,7 +3392,7 @@
 
 ###########################################################################
 
-(def version "2025-12-29_01-25-41")
+(def version "2025-12-29_03-39-18")
 
 (def usage
   ``
@@ -3608,23 +3625,20 @@ actual:
     (eprintf "failed to parse test output: %s" out)
     (break nil))
   #
-  (def lines-tbl parsed)
-  (def line-nums (sort (keys lines-tbl)))
-  (def line-num (get line-nums 0))
-  (def new-value (get lines-tbl line-num))
-  (when (not new-value)
-    (eprintf "failed to find actual value for line: %d" line-num)
-    (break nil))
-  #
-  (printf "Found test to update in file: %s at line: %d"
-          filepath line-num)
-  (def ret (r/patch-file filepath line-num new-value))
+  (def lines-tbl
+    (if (get opts :update-first)
+      (let [key-0 (get (sort (keys parsed)) 0)]
+        @{key-0 (get parsed key-0)})
+      parsed))
+  (def ret (r/patch-file filepath lines-tbl))
   (when (not ret)
     (eprintf "failed to patch file: %s" filepath)
     (break nil))
   #
   (os/rm test-filepath)
-  (break :stop))
+  (break (if (get opts :update-first)
+           :stop
+           :continue)))
 
 ########################################################################
 
@@ -3643,6 +3657,8 @@ actual:
   (when (os/getenv "NO_COLOR")
     (put opts :no-color true))
   #
+  (def update? (or (get opts :update) (get opts :update-first)))
+  #
   (def includes (get opts :includes))
   (def excludes (get opts :excludes))
   #
@@ -3655,7 +3671,7 @@ actual:
                (= :file (os/stat path :mode)))
       (print path)
       (def result
-        (if (get opts :update-first)
+        (if update?
           (make-run-update path (merge opts {:no-color true}))
           (make-run-report path opts)))
       (cond
@@ -3663,6 +3679,9 @@ actual:
         (do
           (printf "Test updated in: %s" path)
           (os/exit 0))
+        #
+        (= :continue result)
+        (printf "Test(s) updated in: %s" path)
         #
         (= :no-tests result)
         # XXX: the 2 newlines here are cosmetic
@@ -3680,6 +3699,7 @@ actual:
           (eprintf "Unexpected result %p for: %p" result path)
           (os/exit 1)))))
   #
-  (printf "All tests completed successfully in %d file(s)."
-          (length src-filepaths)))
+  (when (not update?)
+    (printf "All tests completed successfully in %d file(s)."
+            (length src-filepaths))))
 

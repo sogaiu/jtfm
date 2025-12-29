@@ -238,23 +238,20 @@ actual:
     (eprintf "failed to parse test output: %s" out)
     (break nil))
   #
-  (def lines-tbl parsed)
-  (def line-nums (sort (keys lines-tbl)))
-  (def line-num (get line-nums 0))
-  (def new-value (get lines-tbl line-num))
-  (when (not new-value)
-    (eprintf "failed to find actual value for line: %d" line-num)
-    (break nil))
-  #
-  (printf "Found test to update in file: %s at line: %d"
-          filepath line-num)
-  (def ret (r/patch-file filepath line-num new-value))
+  (def lines-tbl
+    (if (get opts :update-first)
+      (let [key-0 (get (sort (keys parsed)) 0)]
+        @{key-0 (get parsed key-0)})
+      parsed))
+  (def ret (r/patch-file filepath lines-tbl))
   (when (not ret)
     (eprintf "failed to patch file: %s" filepath)
     (break nil))
   #
   (os/rm test-filepath)
-  (break :stop))
+  (break (if (get opts :update-first)
+           :stop
+           :continue)))
 
 ########################################################################
 
@@ -273,6 +270,8 @@ actual:
   (when (os/getenv "NO_COLOR")
     (put opts :no-color true))
   #
+  (def update? (or (get opts :update) (get opts :update-first)))
+  #
   (def includes (get opts :includes))
   (def excludes (get opts :excludes))
   #
@@ -285,7 +284,7 @@ actual:
                (= :file (os/stat path :mode)))
       (print path)
       (def result
-        (if (get opts :update-first)
+        (if update?
           (make-run-update path (merge opts {:no-color true}))
           (make-run-report path opts)))
       (cond
@@ -293,6 +292,9 @@ actual:
         (do
           (printf "Test updated in: %s" path)
           (os/exit 0))
+        #
+        (= :continue result)
+        (printf "Test(s) updated in: %s" path)
         #
         (= :no-tests result)
         # XXX: the 2 newlines here are cosmetic
@@ -310,6 +312,7 @@ actual:
           (eprintf "Unexpected result %p for: %p" result path)
           (os/exit 1)))))
   #
-  (printf "All tests completed successfully in %d file(s)."
-          (length src-filepaths)))
+  (when (not update?)
+    (printf "All tests completed successfully in %d file(s)."
+            (length src-filepaths))))
 

@@ -783,47 +783,64 @@
               "(_verify/report)"
               eol-str))))
 
+(defn r/patch-zloc
+  [a-zloc lines-table]
+  (var zloc a-zloc)
+  (var ok? true)
+  (each line (sort (keys lines-table)) # order important
+    (when (not zloc)
+      (break))
+    #
+    (def ti-zloc
+      (j/search-from zloc
+                     |(when-let [node (j/node $)
+                                 [n-type {:bl bl} _] node]
+                        (and (= :comment n-type)
+                             (= bl line)))))
+    (when (not ti-zloc)
+      (eprintf "failed to find test indicator at line: %d" line)
+      (set ok? false)
+      (break))
+    #
+    (def ee-zloc (r/find-expected-expr ti-zloc))
+    # get value to patch with
+    (def value (get lines-table line))
+    (def new-node
+      (try (-> (j/par value)
+               j/zip-down
+               j/node)
+        ([e] (eprint e)
+             (errorf "failed to create node for value: %n" value))))
+    # patch with value
+    (def new-zloc (j/replace ee-zloc new-node))
+    (when (not new-zloc)
+      (eprintf "failed to replace with new node: %n" new-node)
+      (set ok? false)
+      (break))
+    #
+    (set zloc new-zloc))
+  #
+  (when ok? zloc))
+
 (defn r/patch-file
-  [filepath line value]
+  [filepath lines-table]
   (def src (slurp filepath))
   (when (empty? src)
     (eprintf "no content for file: %s" filepath)
     (break nil))
-  #
+  # prepare and patch
   (def zloc
-    (try (-> src
-             j/par
-             j/zip-down)
+    (try (-> src j/par j/zip-down)
       ([e] (eprint e)
            (errorf "failed to create zipper for: %s" filepath))))
-  (def ti-zloc
-    (j/search-from zloc
-                   |(when-let [node (j/node $)
-                               [n-type {:bl bl} _] node]
-                      (and (= :comment n-type)
-                           (= bl line)))))
-  (when (not ti-zloc)
-    (eprintf "failed to find test indicator at line: %d" line)
-    (break nil))
-  #
-  (def ee-zloc (r/find-expected-expr ti-zloc))
-  (def new-node
-    (try (-> (j/par value)
-             j/zip-down
-             j/node)
-      ([e] (eprint e)
-           (errorf "failed to create node for value: %n" value))))
-  (def new-zloc (j/replace ee-zloc new-node))
+  (def new-zloc (r/patch-zloc zloc lines-table))
   (when (not new-zloc)
-    (eprintf "failed to replace with new node: %n" new-node)
     (break nil))
   #
   (def new-src
-    (try (-> new-zloc
-             j/root
-             j/gen)
+    (try (-> new-zloc j/root j/gen)
       ([e] (eprint e)
-           (errorf "failed to create new src for: %n" new-node))))
+           (errorf "failed to create new src for: %n" ))))
   (when (not new-src)
     (eprintf "unexpected falsy value for new-src")
     (break nil))
