@@ -2,6 +2,7 @@
 (import ./rewrite :as r)
 (import ./search :as s)
 (import ./tests :as t)
+(import ./verify :as v)
 
 ###########################################################################
 
@@ -65,22 +66,6 @@
     (jtfm/main)
   ``)
 
-(defn report
-  [out err]
-  (when (and out (pos? (length out)))
-    (print out)
-    (print))
-  (when (and err (pos? (length err)))
-    (print "------")
-    (print "stderr")
-    (print "------")
-    (print err)
-    (print))
-  # XXX: kind of awkward
-  (when (and (empty? out) (empty? err))
-    (print "no test output...possibly no tests")
-    (print)))
-
 (defn make-and-run
   [filepath &opt opts]
   (default opts @{})
@@ -99,14 +84,34 @@
   #
   [ecode test-filepath out err])
 
+(defn report
+  [test-results err]
+  (v/report test-results)
+  (when (and err (pos? (length err)))
+    (print)
+    (print)
+    (v/report-stderr err)
+    (print))
+  (when (and (zero? (get test-results :total-tests))
+             (empty? err))
+    (print "no test output...possibly no tests")
+    (print)))
+
 (defn make-run-report
   [filepath &opt opts]
   # try to make and run tests, then collect output
   (def [ecode test-filepath out err] (make-and-run filepath opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
+  #
+  (def parsed (t/parse-out out))
+  (when (not parsed)
+    (eprintf "failed to parse test output: %s" out)
+    (break nil))
+  #
+  (def test-results parsed)
   # print out results
-  (report out err)
+  (report test-results err)
   # finish off
   (when (zero? ecode)
     (os/rm test-filepath)
@@ -128,11 +133,20 @@
     (eprintf "failed to parse test output: %s" out)
     (break nil))
   #
+  (def fails (get parsed :fails))
+  (def raw-lines-tbl
+    (tabseq [f :in fails
+             :let [{:name name
+                    :test-value test-value} f
+                   # XXX: assumes `name` is like `line-11`
+                   line-no (scan-number (string/slice name 5))
+                   tv-str (string/format "%j" test-value)]]
+      line-no tv-str))
   (def lines-tbl
     (if (get opts :update-first)
-      (let [key-0 (get (sort (keys parsed)) 0)]
-        @{key-0 (get parsed key-0)})
-      parsed))
+      (let [key-0 (get (sort (keys raw-lines-tbl)) 0)]
+        @{key-0 (get raw-lines-tbl key-0)})
+      raw-lines-tbl))
   (def ret (r/patch-file filepath lines-tbl))
   (when (not ret)
     (eprintf "failed to patch file: %s" filepath)

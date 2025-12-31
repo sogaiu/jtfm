@@ -52,34 +52,49 @@
       (eprintf "problem executing tests: %p" e)
       [nil nil nil])))
 
-# XXX: work on "output as data" later
 (defn parse-out
   [out]
-  # see verify.janet
-  (def dashes (string/repeat "-" 60))
-  # remove from dashes onwards and trim the left end of the output
-  (def dashes-idx (string/find dashes out))
-  (def truncated (string/triml (string/slice out 0 dashes-idx)))
-  (def m (peg/match ~(some (sequence "--(" :d+ ")--"
-                                     (thru "\n")
-                                     (thru "\nfailed:")
-                                     (thru "\nline-")
-                                     (number :d+)
-                                     (thru "\n")
-                                     (thru "\nform:")
-                                     (thru "\n")
-                                     (thru "\nexpected:")
-                                     (thru "\nactual:")
-                                     (thru "\n")
-                                     (capture (to "\n"))
-                                     (thru "\n")
-                                     (thru "\n")
-                                     (choice (look 0 "--(")
-                                             -1)))
-                    truncated))
-  (if m
-    (table ;m)
-    nil))
+  (def [headers-blob body] (string/split "\n\n" out 0 2))
+  (def headers
+    (peg/match ~{:eol (choice "\r\n" "\n")
+                 :line (sequence (capture (to (choice :eol -1)))
+                                 (choice :eol -1))
+                 :main (some :line)}
+               headers-blob))
+  (def meta @{})
+  (each h headers
+    (def [name value] (string/split ": " h))
+    (put meta (string/ascii-lower name) value))
+  (def boundary (get meta "boundary"))
+  (assertf boundary "expected non-empty boundary")
+  (def total-fails (scan-number (get meta "fails")))
+  (assertf (number? total-fails) "expected number but found: %n"
+           (get meta "fails"))
+  (def total-tests (scan-number (get meta "tests")))
+  (assertf (number? total-tests) "expected number but found: %n"
+           (get meta "tests"))
+  (def raw-fails
+    (if (pos? total-fails)
+      (string/split boundary body 0 total-fails)
+      # handle the no "boundary" string case separately, since if
+      # delimiter not found, string/split returns single element and
+      # that is not desired.
+      @[]))
+  (def fails @[])
+  (each rf raw-fails
+    (def f
+      (try
+        (do # check if parseable
+          (string/format "%j" rf)
+          (parse rf))
+        ([e]
+          (eprint e)
+          (errorf "unreadable value in: %s" rf))))
+    (array/push fails f))
+  #
+  @{:total-tests total-tests
+    :total-fails total-fails
+    :fails fails})
 
 (comment
 
@@ -87,42 +102,82 @@
 
   (def output
     (string
-      "--(1)--"   eol
+      "Tests: 3"                                                      eol
+      "Fails: 2"                                                      eol
+      "Boundary: ########"                                            eol
       eol
-      "failed:"   eol
-      "line-4"    eol
-      eol
-      "form:"     eol
-      "(+ 1 2)"   eol
-      eol
-      "expected:" eol
-      "2"         eol
-      eol
-      "actual:"   eol
-      "3"         eol
-      eol
-      "--(2)--"   eol
-      eol
-      "failed:"   eol
-      "line-8"    eol
-      eol
-      "form:"     eol
-      "(- 1 1)"   eol
-      eol
-      "expected:" eol
-      "1"         eol
-      eol
-      "actual:"   eol
-      "0"         eol
-      eol
-      "------------------------------------------------------------" eol
-      "0 of 2 passed" eol
-      "------------------------------------------------------------"))
+      "{ :expected-form @[:xa]"                                       eol
+      "  :expected-status true"                                       eol
+      "  :expected-value @[:xa]"                                      eol
+      `  :name "line-8"`                                              eol
+      "  :passed false"                                               eol
+      "  :test-form (array/concat @[] :a)"                            eol
+      "  :test-status true"                                           eol
+      "  :test-value @[:a]}"                                          eol
+      "########"                                                      eol
+      "{ :expected-form 0"                                            eol
+      "  :expected-status true"                                       eol
+      "  :expected-value 0"                                           eol
+      `  :name "line-12"`                                             eol
+      "  :test-form (- 1 :a)"                                         eol
+      "  :test-status false"                                          eol
+      `  :test-value "could not find method :- for 1 or :r- for :a"}` eol
+      "########"                                                      eol))
 
   (parse-out output)
   # =>
-  @{4 "3"
-    8 "0"}
+  '@{:fails
+     @[{:expected-form @[:xa]
+        :expected-status true
+        :expected-value @[:xa]
+        :name "line-8"
+        :passed false
+        :test-form (array/concat @[] :a)
+        :test-status true
+        :test-value @[:a]}
+       {:expected-form 0
+        :expected-status true
+        :expected-value 0
+        :name "line-12"
+        :test-form (- 1 :a)
+        :test-status false
+        :test-value "could not find method :- for 1 or :r- for :a"}]
+    :total-fails 2
+    :total-tests 3}
+
+  (def erroring-output
+    (string
+      "Tests: 1"                          eol
+      "Fails: 1"                          eol
+      "Boundary: ########"                eol
+      eol
+      "{ :expected-form 0"                eol
+      "  :expected-status true"           eol
+      "  :expected-value 0"               eol
+      `  :name "line-4"`                  eol
+      "  :passed false"                   eol
+      "  :test-form printf"               eol
+      "  :test-status true"               eol
+      "  :test-value <cfunction printf>}" eol
+      "########"                          eol))
+
+  (let [err-buf @""]
+    (with-dyns [:err err-buf]
+      [err-buf (protect (parse-out erroring-output))]))
+  # =>
+  [@"struct and table literals expect even number of arguments\n"
+   [false
+    (string
+      "unreadable value in: "
+      "{ :expected-form 0\n"
+      "  :expected-status true\n"
+      "  :expected-value 0\n"
+      "  :name \"line-4\"\n"
+      "  :passed false\n"
+      "  :test-form printf\n"
+      "  :test-status true\n"
+      "  :test-value <cfunction printf>}\n"
+      "########\n")]]
 
   )
 

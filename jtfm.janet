@@ -2270,16 +2270,22 @@
       ~(do
          (def [,$ts ,$tr] (protect (eval ',t-form)))
          (def [,$es ,$er] (protect (eval ',e-form)))
+         # XXX: consider base64-encoding or other for test-value
+         #      and expected-value as this might help parsing the
+         #      string passed back to the calling process
          (array/push _verify/test-results
-                     {:expected-form ',e-form
+                     {:test-form ',t-form
+                      :test-status ,$ts
+                      :test-value ,$tr
+                      #
+                      :expected-form ',e-form
+                      :expected-status ,$es
                       :expected-value ,$er
+                      #
                       :name ,name
                       :passed (if (and ,$ts ,$es)
                                 (deep= ,$tr ,$er)
-                                nil)
-                      :test-form ',t-form
-                      :test-value ,$tr
-                      :type :is})
+                                nil)})
          ,name)))
 
   (defn _verify/start-tests
@@ -2291,111 +2297,132 @@
     []
     (set _verify/end-time (os/clock)))
 
-  (defn _verify/print-color
-    [msg color]
-    # XXX: what if color doesn't match...
-    (let [color-num (match color
-                      :black 30
-                      :blue 34
-                      :cyan 36
-                      :green 32
-                      :magenta 35
-                      :red 31
-                      :white 37
-                      :yellow 33)]
-      (def real-msg
-        (if (os/getenv "NO_COLOR")
-          msg
-          (string "\e[" color-num "m" msg "\e[0m")))
-      (prin real-msg)))
-
-  (defn _verify/dashes
-    [&opt n]
-    (default n 60)
-    (string/repeat "-" n))
-
-  (defn _verify/print-dashes
-    [&opt n]
-    (print (_verify/dashes n)))
-
-  (defn _verify/print-form
-    [form &opt color]
-    (def buf @"")
-    (with-dyns [:out buf]
-      (printf "%m" form))
-    (def msg (string/trimr buf))
-    (print ":")
-    (if color
-      (_verify/print-color msg color)
-      (prin msg))
-    (print))
-
   (defn _verify/report
     []
     (var total-tests 0)
     (var total-passed 0)
     # analyze results
-    (var passed 0)
-    (var num-tests (length _verify/test-results))
-    (var fails @[])
-    (each test-result _verify/test-results
+    (def fails @[])
+    (each tr _verify/test-results
       (++ total-tests)
-      (def {:passed test-passed} test-result)
+      (def {:passed test-passed} tr)
       (if test-passed
-        (do
-          (++ passed)
-          (++ total-passed))
-        (array/push fails test-result)))
+        (++ total-passed)
+        (array/push fails tr)))
     # report any failures
-    (var i 0)
-    (each fail fails
-      (def {:test-value test-value
-            :expected-value expected-value
-            :name test-name
-            :passed test-passed
-            :test-form test-form} fail)
-      (++ i)
-      (print)
-      (prin "--(")
-      (_verify/print-color i :cyan)
-      (print ")--")
-      (print)
-      #
-      (_verify/print-color "failed:" :yellow)
-      (print)
-      (_verify/print-color test-name :red)
-      (print)
-      #
-      (print)
-      (_verify/print-color "form" :yellow)
-      (_verify/print-form test-form)
-      #
-      (print)
-      (_verify/print-color "expected" :yellow)
-      (_verify/print-form expected-value)
-      #
-      (print)
-      (_verify/print-color "actual" :yellow)
-      (_verify/print-form test-value :blue))
-    (when (zero? (length fails))
-      (print)
-      (print "No tests failed."))
-    # summarize totals
+    # XXX: boundary marker should not be too predicatable
+    (def boundary (string/format "# ! * %f * ! #" (os/clock)))
+    (print "Tests: " total-tests)
+    (print "Fails: " (length fails))
+    (print "Boundary: " boundary)
     (print)
-    (_verify/print-dashes)
-    (when (= 0 total-tests)
-      (print "No tests found, so no judgements made.")
-      (break true))
-    (if (not= total-passed total-tests)
-      (_verify/print-color total-passed :red)
-      (_verify/print-color total-passed :green))
-    (prin " of ")
-    (_verify/print-color total-tests :green)
-    (print " passed")
-    (_verify/print-dashes)
+    (each f fails
+      (printf "%m" f)
+      (print boundary))
     (when (not= total-passed total-tests)
       (os/exit 1)))
   ``)
+
+(defn v/print-color
+  [msg color]
+  # XXX: what if color doesn't match...
+  (let [color-num (match color
+                    :black 30
+                    :blue 34
+                    :cyan 36
+                    :green 32
+                    :magenta 35
+                    :red 31
+                    :white 37
+                    :yellow 33)]
+    (def real-msg
+      (if (os/getenv "NO_COLOR")
+        msg
+        (string "\e[" color-num "m" msg "\e[0m")))
+    (prin real-msg)))
+
+(defn v/dashes
+  [&opt n]
+  (default n 60)
+  (string/repeat "-" n))
+
+(defn v/print-dashes
+  [&opt n]
+  (print (v/dashes n)))
+
+(defn v/print-form
+  [form &opt color]
+  (def buf @"")
+  (with-dyns [:out buf]
+    (printf "%m" form))
+  (def msg (string/trimr buf))
+  (print ":")
+  (if color
+    (v/print-color msg color)
+    (prin msg))
+  (print))
+
+(defn v/report
+  [{:total-tests total-tests :fails fails}]
+  (def total-passed (- total-tests (length fails)))
+  (var i 0)
+  (each fail fails
+    (def {:test-value test-value
+          :expected-value expected-value
+          :name test-name
+          :passed test-passed
+          :test-form test-form} fail)
+    (++ i)
+    (print)
+    (prin "--(")
+    (v/print-color i :cyan)
+    (print ")--")
+    (print)
+
+    (v/print-color "failed:" :yellow)
+    (print)
+    (v/print-color test-name :red)
+    (print)
+
+    (print)
+    (v/print-color "form" :yellow)
+    (v/print-form test-form)
+
+    (print)
+    (v/print-color "expected" :yellow)
+    (v/print-form expected-value)
+
+    (print)
+    (v/print-color "actual" :yellow)
+    (v/print-form test-value :blue))
+  (when (zero? (length fails))
+    (print)
+    (print "No tests failed."))
+  # summarize totals
+  (print)
+  (v/print-dashes)
+  (when (= 0 total-tests)
+    (print "No tests found, so no judgements made.")
+    (break true))
+  (if (not= total-passed total-tests)
+    (v/print-color total-passed :red)
+    (v/print-color total-passed :green))
+  (prin " of ")
+  (v/print-color total-tests :green)
+  (print " passed")
+  (v/print-dashes)
+  # extra newlines from original report function handling out
+  (print)
+  (print))
+
+(defn v/report-stderr
+  [err]
+  (when (and err (pos? (length err)))
+    (print "------")
+    (print "stderr")
+    (print "------")
+    (print err)
+    (print)))
 
 
 
@@ -3448,34 +3475,49 @@
       (eprintf "problem executing tests: %p" e)
       [nil nil nil])))
 
-# XXX: work on "output as data" later
 (defn t/parse-out
   [out]
-  # see verify.janet
-  (def dashes (string/repeat "-" 60))
-  # remove from dashes onwards and trim the left end of the output
-  (def dashes-idx (string/find dashes out))
-  (def truncated (string/triml (string/slice out 0 dashes-idx)))
-  (def m (peg/match ~(some (sequence "--(" :d+ ")--"
-                                     (thru "\n")
-                                     (thru "\nfailed:")
-                                     (thru "\nline-")
-                                     (number :d+)
-                                     (thru "\n")
-                                     (thru "\nform:")
-                                     (thru "\n")
-                                     (thru "\nexpected:")
-                                     (thru "\nactual:")
-                                     (thru "\n")
-                                     (capture (to "\n"))
-                                     (thru "\n")
-                                     (thru "\n")
-                                     (choice (look 0 "--(")
-                                             -1)))
-                    truncated))
-  (if m
-    (table ;m)
-    nil))
+  (def [headers-blob body] (string/split "\n\n" out 0 2))
+  (def headers
+    (peg/match ~{:eol (choice "\r\n" "\n")
+                 :line (sequence (capture (to (choice :eol -1)))
+                                 (choice :eol -1))
+                 :main (some :line)}
+               headers-blob))
+  (def meta @{})
+  (each h headers
+    (def [name value] (string/split ": " h))
+    (put meta (string/ascii-lower name) value))
+  (def boundary (get meta "boundary"))
+  (assertf boundary "expected non-empty boundary")
+  (def total-fails (scan-number (get meta "fails")))
+  (assertf (number? total-fails) "expected number but found: %n"
+           (get meta "fails"))
+  (def total-tests (scan-number (get meta "tests")))
+  (assertf (number? total-tests) "expected number but found: %n"
+           (get meta "tests"))
+  (def raw-fails
+    (if (pos? total-fails)
+      (string/split boundary body 0 total-fails)
+      # handle the no "boundary" string case separately, since if
+      # delimiter not found, string/split returns single element and
+      # that is not desired.
+      @[]))
+  (def fails @[])
+  (each rf raw-fails
+    (def f
+      (try
+        (do # check if parseable
+          (string/format "%j" rf)
+          (parse rf))
+        ([e]
+          (eprint e)
+          (errorf "unreadable value in: %s" rf))))
+    (array/push fails f))
+  #
+  @{:total-tests total-tests
+    :total-fails total-fails
+    :fails fails})
 
 (comment
 
@@ -3483,50 +3525,92 @@
 
   (def output
     (string
-      "--(1)--"   eol
+      "Tests: 3"                                                      eol
+      "Fails: 2"                                                      eol
+      "Boundary: ########"                                            eol
       eol
-      "failed:"   eol
-      "line-4"    eol
-      eol
-      "form:"     eol
-      "(+ 1 2)"   eol
-      eol
-      "expected:" eol
-      "2"         eol
-      eol
-      "actual:"   eol
-      "3"         eol
-      eol
-      "--(2)--"   eol
-      eol
-      "failed:"   eol
-      "line-8"    eol
-      eol
-      "form:"     eol
-      "(- 1 1)"   eol
-      eol
-      "expected:" eol
-      "1"         eol
-      eol
-      "actual:"   eol
-      "0"         eol
-      eol
-      "------------------------------------------------------------" eol
-      "0 of 2 passed" eol
-      "------------------------------------------------------------"))
+      "{ :expected-form @[:xa]"                                       eol
+      "  :expected-status true"                                       eol
+      "  :expected-value @[:xa]"                                      eol
+      `  :name "line-8"`                                              eol
+      "  :passed false"                                               eol
+      "  :test-form (array/concat @[] :a)"                            eol
+      "  :test-status true"                                           eol
+      "  :test-value @[:a]}"                                          eol
+      "########"                                                      eol
+      "{ :expected-form 0"                                            eol
+      "  :expected-status true"                                       eol
+      "  :expected-value 0"                                           eol
+      `  :name "line-12"`                                             eol
+      "  :test-form (- 1 :a)"                                         eol
+      "  :test-status false"                                          eol
+      `  :test-value "could not find method :- for 1 or :r- for :a"}` eol
+      "########"                                                      eol))
 
   (t/parse-out output)
   # =>
-  @{4 "3"
-    8 "0"}
+  '@{:fails
+     @[{:expected-form @[:xa]
+        :expected-status true
+        :expected-value @[:xa]
+        :name "line-8"
+        :passed false
+        :test-form (array/concat @[] :a)
+        :test-status true
+        :test-value @[:a]}
+       {:expected-form 0
+        :expected-status true
+        :expected-value 0
+        :name "line-12"
+        :test-form (- 1 :a)
+        :test-status false
+        :test-value "could not find method :- for 1 or :r- for :a"}]
+    :total-fails 2
+    :total-tests 3}
+
+  (def erroring-output
+    (string
+      "Tests: 1"                          eol
+      "Fails: 1"                          eol
+      "Boundary: ########"                eol
+      eol
+      "{ :expected-form 0"                eol
+      "  :expected-status true"           eol
+      "  :expected-value 0"               eol
+      `  :name "line-4"`                  eol
+      "  :passed false"                   eol
+      "  :test-form printf"               eol
+      "  :test-status true"               eol
+      "  :test-value <cfunction printf>}" eol
+      "########"                          eol))
+
+  (let [err-buf @""]
+    (with-dyns [:err err-buf]
+      [err-buf (protect (t/parse-out erroring-output))]))
+  # =>
+  [@"struct and table literals expect even number of arguments\n"
+   [false
+    (string
+      "unreadable value in: "
+      "{ :expected-form 0\n"
+      "  :expected-status true\n"
+      "  :expected-value 0\n"
+      "  :name \"line-4\"\n"
+      "  :passed false\n"
+      "  :test-form printf\n"
+      "  :test-status true\n"
+      "  :test-value <cfunction printf>}\n"
+      "########\n")]]
 
   )
 
 
+(comment import ./verify :prefix "")
+
 
 ###########################################################################
 
-(def version "2025-12-29_05-36-39")
+(def version "2025-12-31_07-17-30")
 
 (def usage
   ``
@@ -3586,22 +3670,6 @@
     (jtfm/main)
   ``)
 
-(defn report
-  [out err]
-  (when (and out (pos? (length out)))
-    (print out)
-    (print))
-  (when (and err (pos? (length err)))
-    (print "------")
-    (print "stderr")
-    (print "------")
-    (print err)
-    (print))
-  # XXX: kind of awkward
-  (when (and (empty? out) (empty? err))
-    (print "no test output...possibly no tests")
-    (print)))
-
 (defn make-and-run
   [filepath &opt opts]
   (default opts @{})
@@ -3620,14 +3688,34 @@
   #
   [ecode test-filepath out err])
 
+(defn report
+  [test-results err]
+  (v/report test-results)
+  (when (and err (pos? (length err)))
+    (print)
+    (print)
+    (v/report-stderr err)
+    (print))
+  (when (and (zero? (get test-results :total-tests))
+             (empty? err))
+    (print "no test output...possibly no tests")
+    (print)))
+
 (defn make-run-report
   [filepath &opt opts]
   # try to make and run tests, then collect output
   (def [ecode test-filepath out err] (make-and-run filepath opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
+  #
+  (def parsed (t/parse-out out))
+  (when (not parsed)
+    (eprintf "failed to parse test output: %s" out)
+    (break nil))
+  #
+  (def test-results parsed)
   # print out results
-  (report out err)
+  (report test-results err)
   # finish off
   (when (zero? ecode)
     (os/rm test-filepath)
@@ -3649,11 +3737,20 @@
     (eprintf "failed to parse test output: %s" out)
     (break nil))
   #
+  (def fails (get parsed :fails))
+  (def raw-lines-tbl
+    (tabseq [f :in fails
+             :let [{:name name
+                    :test-value test-value} f
+                   # XXX: assumes `name` is like `line-11`
+                   line-no (scan-number (string/slice name 5))
+                   tv-str (string/format "%j" test-value)]]
+      line-no tv-str))
   (def lines-tbl
     (if (get opts :update-first)
-      (let [key-0 (get (sort (keys parsed)) 0)]
-        @{key-0 (get parsed key-0)})
-      parsed))
+      (let [key-0 (get (sort (keys raw-lines-tbl)) 0)]
+        @{key-0 (get raw-lines-tbl key-0)})
+      raw-lines-tbl))
   (def ret (r/patch-file filepath lines-tbl))
   (when (not ret)
     (eprintf "failed to patch file: %s" filepath)
