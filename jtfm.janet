@@ -2268,9 +2268,7 @@
   (var _verify/test-results @[])
 
   (defmacro _verify/is
-    [t-form e-form &opt name]
-    (default name
-      (string "test-" (inc (length _verify/test-results))))
+    [t-form e-form line-no name]
     (with-syms [$ts $tr
                 $es $er]
       ~(do
@@ -2285,6 +2283,7 @@
                        :expected-status ,$es
                        :expected-value ,$er
                        #
+                       :line-no ,line-no
                        :name ,name
                        :passed (if (and ,$ts ,$es)
                                  (deep= ,$tr ,$er)
@@ -2769,10 +2768,15 @@
   [left right]
   (string ""
           (when (not (empty? left))
-            (string " " left))
-          (when (or (not (empty? left))
-                    (not (empty? right)))
-            (string " =>"))
+            left)
+          (cond
+            (not (empty? left))
+            " =>"
+            #
+            (not (empty? right))
+            "=>"
+            #
+            "")
           (when (not (empty? right))
             (string " " right))))
 
@@ -2780,15 +2784,15 @@
 
   (r/make-label "hi" "there")
   # =>
-  " hi => there"
+  "hi => there"
 
   (r/make-label "hi" "")
   # =>
-  " hi =>"
+  "hi =>"
 
   (r/make-label "" "there")
   # =>
-  " => there"
+  "=> there"
 
   (r/make-label "" "")
   # =>
@@ -2845,7 +2849,7 @@
   )
 
 (defn r/wrap-as-test-call
-  [start-zloc end-zloc test-label]
+  [start-zloc end-zloc ti-line-no test-label]
   # XXX: hack - not sure if robust enough
   (def eol-str (if (= :windows (os/which)) "\r\n" "\n"))
   (-> (j/wrap start-zloc [:tuple @{}] end-zloc)
@@ -2857,6 +2861,9 @@
       # before the beginning of the tuple (_verify/is ...)
       (j/insert-left [:whitespace @{} "  "])
       # add location info argument
+      (j/append-child [:whitespace @{} " "])
+      (j/append-child [:number @{} (string ti-line-no)])
+      #
       (j/append-child [:whitespace @{} " "])
       (j/append-child [:string @{} test-label])))
 
@@ -2881,14 +2888,16 @@
                      left-of-t-zloc
                      #
                      t-zloc)
-        w-zloc (r/wrap-as-test-call start-zloc e-zloc "\n\"hi!\"")]
+        w-zloc (r/wrap-as-test-call start-zloc e-zloc "3" `""`)]
     (j/gen (j/node w-zloc)))
   # =>
   (string "(_verify/is\n"
           "(+ 1 1)\n"
           "# =>\n"
-          "2 \n"
-          `"hi!")`)
+          "2 "
+          "3 "
+          `""`
+          ")")
 
   )
 
@@ -2918,12 +2927,12 @@
                  end-zloc expected-expr-zloc
                  # XXX: use `attrs` here?
                  ti-line-no ((get (j/node ti-zloc) 1) :bl)
-                 test-label (string `"`
-                                    `line-` ti-line-no
-                                    (r/make-label label-left label-right)
-                                    `"`)]
+                 test-label
+                 (string/format `"%s"`
+                                (r/make-label label-left label-right))]
              (set found-test true)
-             (r/wrap-as-test-call start-zloc end-zloc test-label)))))
+             (r/wrap-as-test-call start-zloc end-zloc
+                                ti-line-no test-label)))))
   # navigate back out to top of block
   (when found-test
     # morph comment block into plain tuple -- to be unwrapped later
@@ -2962,19 +2971,19 @@
       j/root
       j/gen)
   # =>
-  (string "( "                          eol
+  (string "( "                     eol
           eol
-          "  (def a 1)"                 eol
+          "  (def a 1)"            eol
           eol
-          "  (_verify/is"               eol
-          "  (put @{} :a 2)"            eol
-          "  # left =>"                 eol
-          `  @{:a 2} "line-6 left =>")` eol
+          "  (_verify/is"          eol
+          "  (put @{} :a 2)"       eol
+          "  # left =>"            eol
+          `  @{:a 2} 6 "left =>")` eol
           eol
-          "  (_verify/is"               eol
-          "  (+ 1 1)"                   eol
-          "  # => right"                eol
-          `  2 "line-10 => right")`     eol
+          "  (_verify/is"          eol
+          "  (+ 1 1)"              eol
+          "  # => right"           eol
+          `  2 10 "=> right")`     eol
           eol
           "  :smile)")
 
@@ -3009,19 +3018,19 @@
 
   (r/rewrite-comment-block src)
   # =>
-  (string "( "                           eol
+  (string "( "                      eol
           eol
-          "  (def a 1)"                  eol
+          "  (def a 1)"             eol
           eol
-          "  (_verify/is"                eol
-          "  (put @{} :a 2)"             eol
-          "  # =>"                       eol
-          `  @{:a 2} "line-6")`          eol
+          "  (_verify/is"           eol
+          "  (put @{} :a 2)"        eol
+          "  # =>"                  eol
+          `  @{:a 2} 6 "")`         eol
           eol
-          "  (_verify/is"                eol
-          "  (+ 1 1)"                    eol
-          "  # left => right"            eol
-          `  2 "line-10 left => right")` eol
+          "  (_verify/is"           eol
+          "  (+ 1 1)"               eol
+          "  # left => right"       eol
+          `  2 10 "left => right")` eol
           eol
           "  :smile)")
 
@@ -3125,12 +3134,12 @@
           "  (_verify/is"        eol
           "  (put @{} :a 2)"     eol
           "  # =>"               eol
-          `  @{:a 2} "line-12")` eol
+          `  @{:a 2} 12 "")`     eol
           eol
           "  (_verify/is"        eol
           "  (my-fn 1)"          eol
           "  # =>"               eol
-          `  2 "line-16")`       eol
+          `  2 16 "")`           eol
           eol
           "  :smile"             eol
           eol
@@ -3143,14 +3152,14 @@
           "  (_verify/is"        eol
           "  (your-fn 3)"        eol
           "  # =>"               eol
-          `  9 "line-28")`       eol
+          `  9 28 "")`           eol
           eol
           "  (def b 1)"          eol
           eol
           "  (_verify/is"        eol
           "  (+ b 1)"            eol
           "  # =>"               eol
-          `  2 "line-34")`       eol
+          `  2 34 "")`           eol
           eol
           "  (def c 2)"          eol
           eol
@@ -3194,7 +3203,7 @@
           "      ``"        eol
           "      length)"   eol
           "  # =>"          eol
-          `  9 "line-7")`   eol
+          `  9 7 "")`       eol
           eol
           "  (_verify/is"   eol
           "  (->"           eol
@@ -3203,7 +3212,7 @@
           "    ``"          eol
           "    length)"     eol
           "  # =>"          eol
-          `  9 "line-15")`  eol
+          `  9 15 "")`      eol
           eol
           "  :smile")
 
@@ -3491,7 +3500,7 @@
 
 ###########################################################################
 
-(def version "2025-12-31_14-44-07")
+(def version "2025-12-31_15-54-35")
 
 (def usage
   ``
@@ -3637,11 +3646,7 @@
     (seq [f :in (if (get opts :update-first)
                   @[(get fails 0)]
                   fails)
-          :let [{:name name :test-value test-value} f
-                line-no (-> name
-                            # assumes `name` is like `line-11`
-                            (string/slice (length "line-"))
-                            scan-number)
+          :let [{:line-no line-no :test-value test-value} f
                 tv-str (string/format "%j" test-value)]]
       [line-no tv-str]))
   (def ret (r/patch-file filepath update-info))

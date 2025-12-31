@@ -9,9 +9,7 @@
   (var _verify/test-results @[])
 
   (defmacro _verify/is
-    [t-form e-form &opt name]
-    (default name
-      (string "test-" (inc (length _verify/test-results))))
+    [t-form e-form line-no name]
     (with-syms [$ts $tr
                 $es $er]
       ~(do
@@ -26,6 +24,7 @@
                        :expected-status ,$es
                        :expected-value ,$er
                        #
+                       :line-no ,line-no
                        :name ,name
                        :passed (if (and ,$ts ,$es)
                                  (deep= ,$tr ,$er)

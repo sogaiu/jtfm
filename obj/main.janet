@@ -152,11 +152,7 @@
     (seq [f :in (if (get opts :update-first)
                   @[(get fails 0)]
                   fails)
-          :let [{:name name :test-value test-value} f
-                line-no (-> name
-                            # assumes `name` is like `line-11`
-                            (string/slice (length "line-"))
-                            scan-number)
+          :let [{:line-no line-no :test-value test-value} f
                 tv-str (string/format "%j" test-value)]]
       [line-no tv-str]))
   (def ret (r/patch-file filepath update-info))
