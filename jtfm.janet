@@ -2296,34 +2296,32 @@
 
   (defn _verify/report
     []
-    (var total-tests 0)
-    (var total-passed 0)
-    # analyze results
-    (def fails @[])
-    (each tr _verify/test-results
-      (++ total-tests)
-      (def {:passed test-passed} tr)
-      (if test-passed
-        (++ total-passed)
-        (array/push fails tr)))
-    # report test results
-    (def test-results @{:num-tests total-tests})
-    (def safe-fails @[])
-    (each f fails
-      (def test-value (get f :test-value))
-      (def [tr ts] (protect (string/format "%j" test-value)))
-      (when (not tr)
-        (put f :test-value (string/format "%m" test-value))
-        (put f :test-unreadable true))
-      (def expected-value (get f :expected-value))
-      (def [er es] (protect (string/format "%j" expected-value)))
-      (when (not er)
-        (put f :expected-value (string/format "%m" expected-value))
-        (put f :expected-unreadable true))
-      (array/push safe-fails f))
+    # find test failures
+    (def fails (filter |(not (get $ :passed)) _verify/test-results))
+    # prepare test results
+    (def test-results @{:num-tests (length _verify/test-results)})
+    (def safe-fails
+      (map (fn [f]
+             (def t-value (get f :test-value))
+             (def [tr ts] (protect (string/format "%j" t-value)))
+             (when (not tr)
+               (-> f
+                   (put :test-value (string/format "%m" t-value))
+                   (put :test-unreadable true)))
+             (def e-value (get f :expected-value))
+             (def [er es] (protect (string/format "%j" e-value)))
+             (when (not er)
+               (-> f
+                   (put :expected-value (string/format "%m" e-value))
+                   (put :expected-unreadable true)))
+             #
+             f)
+           fails))
     (put test-results :fails safe-fails)
+    # report test results
     (printf "%j" test-results)
-    (when (not= total-passed total-tests)
+    # abort if there were any failures
+    (when (not (empty? fails))
       (os/exit 1)))
   ``)
 
@@ -2370,12 +2368,12 @@
   [{:num-tests total-tests :fails fails}]
   (def total-passed (- total-tests (length fails)))
   (var i 0)
-  (each fail fails
+  (each f fails
     (def {:test-value test-value
           :expected-value expected-value
           :name test-name
           :passed test-passed
-          :test-form test-form} fail)
+          :test-form test-form} f)
     (++ i)
     (print)
     (prin "--(")
@@ -3483,7 +3481,7 @@
 
 ###########################################################################
 
-(def version "2025-12-31_13-00-22")
+(def version "2025-12-31_14-18-10")
 
 (def usage
   ``
@@ -3558,6 +3556,10 @@
   (def test-filepath result)
   # run tests and collect output
   (def [ecode out err] (t/run-tests test-filepath opts))
+  #
+  (when (empty? out)
+    (eprintf "expected non-empty output")
+    (eprintf "possible problem in verify.janet"))
   #
   (def test-results (parse out))
   (def fails (get test-results :fails))

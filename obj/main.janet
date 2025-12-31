@@ -82,6 +82,10 @@
   # run tests and collect output
   (def [ecode out err] (t/run-tests test-filepath opts))
   #
+  (when (empty? out)
+    (eprintf "expected non-empty output")
+    (eprintf "possible problem in verify.janet"))
+  #
   (def test-results (parse out))
   (def fails (get test-results :fails))
   (var test-unreadable? nil)
