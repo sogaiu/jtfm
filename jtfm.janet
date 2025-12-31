@@ -2270,22 +2270,19 @@
       ~(do
          (def [,$ts ,$tr] (protect (eval ',t-form)))
          (def [,$es ,$er] (protect (eval ',e-form)))
-         # XXX: consider base64-encoding or other for test-value
-         #      and expected-value as this might help parsing the
-         #      string passed back to the calling process
          (array/push _verify/test-results
-                     {:test-form ',t-form
-                      :test-status ,$ts
-                      :test-value ,$tr
-                      #
-                      :expected-form ',e-form
-                      :expected-status ,$es
-                      :expected-value ,$er
-                      #
-                      :name ,name
-                      :passed (if (and ,$ts ,$es)
-                                (deep= ,$tr ,$er)
-                                nil)})
+                     @{:test-form ',t-form
+                       :test-status ,$ts
+                       :test-value ,$tr
+                       #
+                       :expected-form ',e-form
+                       :expected-status ,$es
+                       :expected-value ,$er
+                       #
+                       :name ,name
+                       :passed (if (and ,$ts ,$es)
+                                 (deep= ,$tr ,$er)
+                                 nil)})
          ,name)))
 
   (defn _verify/start-tests
@@ -2309,16 +2306,23 @@
       (if test-passed
         (++ total-passed)
         (array/push fails tr)))
-    # report any failures
-    # XXX: boundary marker should not be too predicatable
-    (def boundary (string/format "# ! * %f * ! #" (os/clock)))
-    (print "Tests: " total-tests)
-    (print "Fails: " (length fails))
-    (print "Boundary: " boundary)
-    (print)
+    # report test results
+    (def test-results @{:num-tests total-tests})
+    (def safe-fails @[])
     (each f fails
-      (printf "%m" f)
-      (print boundary))
+      (def test-value (get f :test-value))
+      (def [tr ts] (protect (string/format "%j" test-value)))
+      (when (not tr)
+        (put f :test-value (string/format "%m" test-value))
+        (put f :test-unreadable true))
+      (def expected-value (get f :expected-value))
+      (def [er es] (protect (string/format "%j" expected-value)))
+      (when (not er)
+        (put f :expected-value (string/format "%m" expected-value))
+        (put f :expected-unreadable true))
+      (array/push safe-fails f))
+    (put test-results :fails safe-fails)
+    (printf "%j" test-results)
     (when (not= total-passed total-tests)
       (os/exit 1)))
   ``)
@@ -2363,7 +2367,7 @@
   (print))
 
 (defn v/report
-  [{:total-tests total-tests :fails fails}]
+  [{:num-tests total-tests :fails fails}]
   (def total-passed (- total-tests (length fails)))
   (var i 0)
   (each fail fails
@@ -3473,137 +3477,13 @@
       (eprintf "problem executing tests: %p" e)
       [nil nil nil])))
 
-(defn t/parse-out
-  [out]
-  (def [headers-blob body] (string/split "\n\n" out 0 2))
-  (def headers
-    (peg/match ~{:eol (choice "\r\n" "\n")
-                 :line (sequence (capture (to (choice :eol -1)))
-                                 (choice :eol -1))
-                 :main (some :line)}
-               headers-blob))
-  (def meta @{})
-  (each h headers
-    (def [name value] (string/split ": " h))
-    (put meta (string/ascii-lower name) value))
-  (def boundary (get meta "boundary"))
-  (assertf boundary "expected non-empty boundary")
-  (def total-fails (scan-number (get meta "fails")))
-  (assertf (number? total-fails) "expected number but found: %n"
-           (get meta "fails"))
-  (def total-tests (scan-number (get meta "tests")))
-  (assertf (number? total-tests) "expected number but found: %n"
-           (get meta "tests"))
-  (def raw-fails
-    (if (= 0 total-fails) # no "boundary" marker
-      # if delimiter not found, string/split returns single element
-      # and that is not desired, so handle separately
-      @[]
-      (string/split boundary body 0 total-fails)))
-  (def fails @[])
-  (var unreadable nil)
-  (each rf raw-fails
-    (def [ok? f] (protect (parse rf)))
-    (when (not ok?)
-      (set unreadable rf)
-      (break))
-    #
-    (array/push fails f))
-  #
-  (if unreadable
-    unreadable
-    @{:total-tests total-tests
-      :total-fails total-fails
-      :fails fails}))
-
-(comment
-
-  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
-
-  (def output
-    (string
-      "Tests: 3"                                                      eol
-      "Fails: 2"                                                      eol
-      "Boundary: ########"                                            eol
-      eol
-      "{ :expected-form @[:xa]"                                       eol
-      "  :expected-status true"                                       eol
-      "  :expected-value @[:xa]"                                      eol
-      `  :name "line-8"`                                              eol
-      "  :passed false"                                               eol
-      "  :test-form (array/concat @[] :a)"                            eol
-      "  :test-status true"                                           eol
-      "  :test-value @[:a]}"                                          eol
-      "########"                                                      eol
-      "{ :expected-form 0"                                            eol
-      "  :expected-status true"                                       eol
-      "  :expected-value 0"                                           eol
-      `  :name "line-12"`                                             eol
-      "  :test-form (- 1 :a)"                                         eol
-      "  :test-status false"                                          eol
-      `  :test-value "could not find method :- for 1 or :r- for :a"}` eol
-      "########"                                                      eol))
-
-  (t/parse-out output)
-  # =>
-  '@{:fails
-     @[{:expected-form @[:xa]
-        :expected-status true
-        :expected-value @[:xa]
-        :name "line-8"
-        :passed false
-        :test-form (array/concat @[] :a)
-        :test-status true
-        :test-value @[:a]}
-       {:expected-form 0
-        :expected-status true
-        :expected-value 0
-        :name "line-12"
-        :test-form (- 1 :a)
-        :test-status false
-        :test-value "could not find method :- for 1 or :r- for :a"}]
-    :total-fails 2
-    :total-tests 3}
-
-  (def erroring-output
-    (string
-      "Tests: 1"                          eol
-      "Fails: 1"                          eol
-      "Boundary: ########"                eol
-      eol
-      "{ :expected-form 0"                eol
-      "  :expected-status true"           eol
-      "  :expected-value 0"               eol
-      `  :name "line-4"`                  eol
-      "  :passed false"                   eol
-      "  :test-form printf"               eol
-      "  :test-status true"               eol
-      "  :test-value <cfunction printf>}" eol
-      "########"                          eol))
-
-  (protect (t/parse-out erroring-output))
-  # =>
-  [true
-   (string
-     "{ :expected-form 0\n"
-     "  :expected-status true\n"
-     "  :expected-value 0\n"
-     "  :name \"line-4\"\n"
-     "  :passed false\n"
-     "  :test-form printf\n"
-     "  :test-status true\n"
-     "  :test-value <cfunction printf>}\n"
-     "########\n")]
-
-  )
-
 
 (comment import ./verify :prefix "")
 
 
 ###########################################################################
 
-(def version "2025-12-31_12-07-09")
+(def version "2025-12-31_13-00-22")
 
 (def usage
   ``
@@ -3679,14 +3559,29 @@
   # run tests and collect output
   (def [ecode out err] (t/run-tests test-filepath opts))
   #
-  (def parsed (t/parse-out out))
-  (when (string? parsed)
-    (eprint "unreadable value in test-value and/or expected-value")
-    (each l (string/split "\n" parsed)
-      (eprintf "  %s" l))
+  (def test-results (parse out))
+  (def fails (get test-results :fails))
+  (var test-unreadable? nil)
+  (var expected-unreadable? nil)
+  (each f fails
+    (when (get f :test-unreadable)
+      (set test-unreadable? f)
+      (break))
+      #
+    (when (get f :expected-unreadable)
+      (set expected-unreadable? f)
+      (break)))
+  #
+  (def fmt-str (if (get opts :no-color) "%m" "%M"))
+  (when test-unreadable?
+    (eprint "unreadable value in test-value")
+    (eprintf fmt-str test-unreadable?)
     (break [nil nil nil nil]))
   #
-  (def test-results parsed)
+  (when expected-unreadable?
+    (eprint "unreadable value in expected-value")
+    (eprintf fmt-str expected-unreadable?)
+    (break [nil nil nil nil]))
   #
   [ecode test-filepath test-results err])
 
@@ -3696,7 +3591,7 @@
   (when (and err (pos? (length err)))
     (v/report-stderr err)
     (print))
-  (when (and (zero? (get test-results :total-tests))
+  (when (and (zero? (get test-results :num-tests))
              (empty? err))
     (print "no test output...possibly no tests")
     (print)))

@@ -82,14 +82,29 @@
   # run tests and collect output
   (def [ecode out err] (t/run-tests test-filepath opts))
   #
-  (def parsed (t/parse-out out))
-  (when (string? parsed)
-    (eprint "unreadable value in test-value and/or expected-value")
-    (each l (string/split "\n" parsed)
-      (eprintf "  %s" l))
+  (def test-results (parse out))
+  (def fails (get test-results :fails))
+  (var test-unreadable? nil)
+  (var expected-unreadable? nil)
+  (each f fails
+    (when (get f :test-unreadable)
+      (set test-unreadable? f)
+      (break))
+      #
+    (when (get f :expected-unreadable)
+      (set expected-unreadable? f)
+      (break)))
+  #
+  (def fmt-str (if (get opts :no-color) "%m" "%M"))
+  (when test-unreadable?
+    (eprint "unreadable value in test-value")
+    (eprintf fmt-str test-unreadable?)
     (break [nil nil nil nil]))
   #
-  (def test-results parsed)
+  (when expected-unreadable?
+    (eprint "unreadable value in expected-value")
+    (eprintf fmt-str expected-unreadable?)
+    (break [nil nil nil nil]))
   #
   [ecode test-filepath test-results err])
 
@@ -99,7 +114,7 @@
   (when (and err (pos? (length err)))
     (v/report-stderr err)
     (print))
-  (when (and (zero? (get test-results :total-tests))
+  (when (and (zero? (get test-results :num-tests))
              (empty? err))
     (print "no test output...possibly no tests")
     (print)))

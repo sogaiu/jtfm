@@ -17,22 +17,19 @@
       ~(do
          (def [,$ts ,$tr] (protect (eval ',t-form)))
          (def [,$es ,$er] (protect (eval ',e-form)))
-         # XXX: consider base64-encoding or other for test-value
-         #      and expected-value as this might help parsing the
-         #      string passed back to the calling process
          (array/push _verify/test-results
-                     {:test-form ',t-form
-                      :test-status ,$ts
-                      :test-value ,$tr
-                      #
-                      :expected-form ',e-form
-                      :expected-status ,$es
-                      :expected-value ,$er
-                      #
-                      :name ,name
-                      :passed (if (and ,$ts ,$es)
-                                (deep= ,$tr ,$er)
-                                nil)})
+                     @{:test-form ',t-form
+                       :test-status ,$ts
+                       :test-value ,$tr
+                       #
+                       :expected-form ',e-form
+                       :expected-status ,$es
+                       :expected-value ,$er
+                       #
+                       :name ,name
+                       :passed (if (and ,$ts ,$es)
+                                 (deep= ,$tr ,$er)
+                                 nil)})
          ,name)))
 
   (defn _verify/start-tests
@@ -56,16 +53,23 @@
       (if test-passed
         (++ total-passed)
         (array/push fails tr)))
-    # report any failures
-    # XXX: boundary marker should not be too predicatable
-    (def boundary (string/format "# ! * %f * ! #" (os/clock)))
-    (print "Tests: " total-tests)
-    (print "Fails: " (length fails))
-    (print "Boundary: " boundary)
-    (print)
+    # report test results
+    (def test-results @{:num-tests total-tests})
+    (def safe-fails @[])
     (each f fails
-      (printf "%m" f)
-      (print boundary))
+      (def test-value (get f :test-value))
+      (def [tr ts] (protect (string/format "%j" test-value)))
+      (when (not tr)
+        (put f :test-value (string/format "%m" test-value))
+        (put f :test-unreadable true))
+      (def expected-value (get f :expected-value))
+      (def [er es] (protect (string/format "%j" expected-value)))
+      (when (not er)
+        (put f :expected-value (string/format "%m" expected-value))
+        (put f :expected-unreadable true))
+      (array/push safe-fails f))
+    (put test-results :fails safe-fails)
+    (printf "%j" test-results)
     (when (not= total-passed total-tests)
       (os/exit 1)))
   ``)
@@ -110,7 +114,7 @@
   (print))
 
 (defn report
-  [{:total-tests total-tests :fails fails}]
+  [{:num-tests total-tests :fails fails}]
   (def total-passed (- total-tests (length fails)))
   (var i 0)
   (each fail fails
