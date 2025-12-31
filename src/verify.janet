@@ -72,23 +72,33 @@
       (os/exit 1)))
   ``)
 
+(def color-table
+  {:black 30
+   :blue 34
+   :cyan 36
+   :green 32
+   :magenta 35
+   :red 31
+   :white 37
+   :yellow 33})
+
 (defn print-color
   [msg color]
-  # XXX: what if color doesn't match...
-  (let [color-num (match color
-                    :black 30
-                    :blue 34
-                    :cyan 36
-                    :green 32
-                    :magenta 35
-                    :red 31
-                    :white 37
-                    :yellow 33)]
-    (def real-msg
-      (if (os/getenv "NO_COLOR")
-        msg
-        (string "\e[" color-num "m" msg "\e[0m")))
-    (prin real-msg)))
+  (def color-num (get color-table color))
+  (assertf color-num "unknown color: %n" color)
+  (def real-msg
+    (if (os/getenv "NO_COLOR")
+      msg
+      (string "\e[" color-num "m" msg "\e[0m")))
+  (prin real-msg))
+
+(comment
+
+  (def [ok? result] (protect (print-color "hey" :chartreuse)))
+  # =>
+  [false "unknown color: :chartreuse"]
+
+  )
 
 (defn dashes
   [&opt n]
