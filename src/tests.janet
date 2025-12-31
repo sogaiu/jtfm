@@ -22,21 +22,15 @@
   test-filepath)
 
 (defn run-tests
-  [test-filepath &opt opts]
-  (default opts {})
-  (def {:no-color no-color} opts)
-  (def ose-flags (if no-color :pe :p))
+  [test-filepath]
   (try
     (with [of (file/temp)]
       (with [ef (file/temp)]
         (let [# prevents any contained `main` functions from executing
               cmd
               ["janet" "-e" (string "(dofile `" test-filepath "`)")]
-              # when trying to update, use NO_COLOR
               ecode
-              (os/execute cmd ose-flags
-                          (merge {:out of :err ef}
-                                 {"NO_COLOR" (when no-color "1")}))]
+              (os/execute cmd :p {:out of :err ef})]
           (when (not (zero? ecode))
             (eprintf "non-zero exit code: %d" ecode))
           #

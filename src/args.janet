@@ -67,6 +67,10 @@
 
 (comment
 
+  (def old-val (os/getenv "NO_COLOR"))
+
+  (os/setenv "NO_COLOR" nil)
+
   (parse-args ["src/main.janet"])
   # =>
   @{:excludes @[]
@@ -86,6 +90,8 @@
   # =>
   @{:excludes @["src/args.janet"]
     :includes @["src/main.janet"]}
+
+  (os/setenv "NO_COLOR" old-val)
 
   )
 

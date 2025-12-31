@@ -70,6 +70,10 @@
 
 (comment
 
+  (def old-val (os/getenv "NO_COLOR"))
+
+  (os/setenv "NO_COLOR" nil)
+
   (a/parse-args ["src/main.janet"])
   # =>
   @{:excludes @[]
@@ -89,6 +93,8 @@
   # =>
   @{:excludes @["src/args.janet"]
     :includes @["src/main.janet"]}
+
+  (os/setenv "NO_COLOR" old-val)
 
   )
 
@@ -3445,21 +3451,15 @@
   test-filepath)
 
 (defn t/run-tests
-  [test-filepath &opt opts]
-  (default opts {})
-  (def {:no-color no-color} opts)
-  (def ose-flags (if no-color :pe :p))
+  [test-filepath]
   (try
     (with [of (file/temp)]
       (with [ef (file/temp)]
         (let [# prevents any contained `main` functions from executing
               cmd
               ["janet" "-e" (string "(dofile `" test-filepath "`)")]
-              # when trying to update, use NO_COLOR
               ecode
-              (os/execute cmd ose-flags
-                          (merge {:out of :err ef}
-                                 {"NO_COLOR" (when no-color "1")}))]
+              (os/execute cmd :p {:out of :err ef})]
           (when (not (zero? ecode))
             (eprintf "non-zero exit code: %d" ecode))
           #
@@ -3481,7 +3481,7 @@
 
 ###########################################################################
 
-(def version "2025-12-31_14-25-31")
+(def version "2025-12-31_14-39-41")
 
 (def usage
   ``
@@ -3555,7 +3555,7 @@
   #
   (def test-filepath result)
   # run tests and collect output
-  (def [ecode out err] (t/run-tests test-filepath opts))
+  (def [ecode out err] (t/run-tests test-filepath))
   #
   (when (empty? out)
     (eprintf "expected non-empty output")
@@ -3674,7 +3674,7 @@
       (print path)
       (def result
         (if update?
-          (make-run-update path (merge opts {:no-color true}))
+          (make-run-update path opts)
           (make-run-report path opts)))
       (cond
         (= :stop result)

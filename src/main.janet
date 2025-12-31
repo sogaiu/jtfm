@@ -80,7 +80,7 @@
   #
   (def test-filepath result)
   # run tests and collect output
-  (def [ecode out err] (t/run-tests test-filepath opts))
+  (def [ecode out err] (t/run-tests test-filepath))
   #
   (when (empty? out)
     (eprintf "expected non-empty output")
@@ -199,7 +199,7 @@
       (print path)
       (def result
         (if update?
-          (make-run-update path (merge opts {:no-color true}))
+          (make-run-update path opts)
           (make-run-report path opts)))
       (cond
         (= :stop result)
