@@ -129,28 +129,27 @@
     (break true))
   #
   (def fails (get test-results :fails))
-  (def raw-lines-tbl
-    (tabseq [f :in fails
-             :let [{:name name
-                    :test-value test-value} f
-                   # XXX: assumes `name` is like `line-11`
-                   line-no (scan-number (string/slice name 5))
-                   tv-str (string/format "%j" test-value)]]
-      line-no tv-str))
-  (def lines-tbl
-    (if (get opts :update-first)
-      (let [key-0 (get (sort (keys raw-lines-tbl)) 0)]
-        @{key-0 (get raw-lines-tbl key-0)})
-      raw-lines-tbl))
-  (def ret (r/patch-file filepath lines-tbl))
+  (def update-info
+    (seq [f :in (if (get opts :update-first)
+                  @[(get fails 0)]
+                  fails)
+          :let [{:name name :test-value test-value} f
+                line-no (-> name
+                            # assumes `name` is like `line-11`
+                            (string/slice (length "line-"))
+                            scan-number)
+                tv-str (string/format "%j" test-value)]]
+      [line-no tv-str]))
+  (def ret (r/patch-file filepath update-info))
   (when (not ret)
     (eprintf "failed to patch file: %s" filepath)
     (break nil))
   #
   (os/rm test-filepath)
-  (break (if (get opts :update-first)
-           :stop
-           :continue)))
+  #
+  (if (get opts :update-first)
+    :stop
+    :continue))
 
 ########################################################################
 

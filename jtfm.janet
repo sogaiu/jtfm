@@ -2378,20 +2378,20 @@
     (v/print-color i :cyan)
     (print ")--")
     (print)
-
+    #
     (v/print-color "failed:" :yellow)
     (print)
     (v/print-color test-name :red)
     (print)
-
+    #
     (print)
     (v/print-color "form" :yellow)
     (v/print-form test-form)
-
+    #
     (print)
     (v/print-color "expected" :yellow)
     (v/print-form expected-value)
-
+    #
     (print)
     (v/print-color "actual" :yellow)
     (v/print-form test-value :blue))
@@ -3209,10 +3209,10 @@
               eol-str))))
 
 (defn r/patch-zloc
-  [a-zloc lines-table]
+  [a-zloc update-info]
   (var zloc a-zloc)
   (var ok? true)
-  (each line (sort (keys lines-table)) # order important
+  (each [line value] update-info
     (when (not zloc)
       (break))
     #
@@ -3228,8 +3228,6 @@
       (break))
     #
     (def ee-zloc (r/find-expected-expr ti-zloc))
-    # get value to patch with
-    (def value (get lines-table line))
     (def new-node
       (try (-> (j/par value)
                j/zip-down
@@ -3248,7 +3246,7 @@
   (when ok? zloc))
 
 (defn r/patch-file
-  [filepath lines-table]
+  [filepath update-info]
   (def src (slurp filepath))
   (when (empty? src)
     (eprintf "no content for file: %s" filepath)
@@ -3258,7 +3256,7 @@
     (try (-> src j/par j/zip-down)
       ([e] (eprint e)
            (errorf "failed to create zipper for: %s" filepath))))
-  (def new-zloc (r/patch-zloc zloc lines-table))
+  (def new-zloc (r/patch-zloc zloc update-info))
   (when (not new-zloc)
     (break nil))
   #
@@ -3497,27 +3495,26 @@
   (assertf (number? total-tests) "expected number but found: %n"
            (get meta "tests"))
   (def raw-fails
-    (if (pos? total-fails)
-      (string/split boundary body 0 total-fails)
-      # handle the no "boundary" string case separately, since if
-      # delimiter not found, string/split returns single element and
-      # that is not desired.
-      @[]))
+    (if (= 0 total-fails) # no "boundary" marker
+      # if delimiter not found, string/split returns single element
+      # and that is not desired, so handle separately
+      @[]
+      (string/split boundary body 0 total-fails)))
   (def fails @[])
+  (var unreadable nil)
   (each rf raw-fails
-    (def f
-      (try
-        (do # check if parseable
-          (string/format "%j" rf)
-          (parse rf))
-        ([e]
-          (eprint e)
-          (errorf "unreadable value in: %s" rf))))
+    (def [ok? f] (protect (parse rf)))
+    (when (not ok?)
+      (set unreadable rf)
+      (break))
+    #
     (array/push fails f))
   #
-  @{:total-tests total-tests
-    :total-fails total-fails
-    :fails fails})
+  (if unreadable
+    unreadable
+    @{:total-tests total-tests
+      :total-fails total-fails
+      :fails fails}))
 
 (comment
 
@@ -3584,23 +3581,19 @@
       "  :test-value <cfunction printf>}" eol
       "########"                          eol))
 
-  (let [err-buf @""]
-    (with-dyns [:err err-buf]
-      [err-buf (protect (t/parse-out erroring-output))]))
+  (protect (t/parse-out erroring-output))
   # =>
-  [@"struct and table literals expect even number of arguments\n"
-   [false
-    (string
-      "unreadable value in: "
-      "{ :expected-form 0\n"
-      "  :expected-status true\n"
-      "  :expected-value 0\n"
-      "  :name \"line-4\"\n"
-      "  :passed false\n"
-      "  :test-form printf\n"
-      "  :test-status true\n"
-      "  :test-value <cfunction printf>}\n"
-      "########\n")]]
+  [true
+   (string
+     "{ :expected-form 0\n"
+     "  :expected-status true\n"
+     "  :expected-value 0\n"
+     "  :name \"line-4\"\n"
+     "  :passed false\n"
+     "  :test-form printf\n"
+     "  :test-status true\n"
+     "  :test-value <cfunction printf>}\n"
+     "########\n")]
 
   )
 
@@ -3610,7 +3603,7 @@
 
 ###########################################################################
 
-(def version "2025-12-31_07-17-30")
+(def version "2025-12-31_12-07-09")
 
 (def usage
   ``
@@ -3686,14 +3679,21 @@
   # run tests and collect output
   (def [ecode out err] (t/run-tests test-filepath opts))
   #
-  [ecode test-filepath out err])
+  (def parsed (t/parse-out out))
+  (when (string? parsed)
+    (eprint "unreadable value in test-value and/or expected-value")
+    (each l (string/split "\n" parsed)
+      (eprintf "  %s" l))
+    (break [nil nil nil nil]))
+  #
+  (def test-results parsed)
+  #
+  [ecode test-filepath test-results err])
 
 (defn report
   [test-results err]
   (v/report test-results)
   (when (and err (pos? (length err)))
-    (print)
-    (print)
     (v/report-stderr err)
     (print))
   (when (and (zero? (get test-results :total-tests))
@@ -3704,16 +3704,9 @@
 (defn make-run-report
   [filepath &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath out err] (make-and-run filepath opts))
+  (def [ecode test-filepath test-results err] (make-and-run filepath opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
-  #
-  (def parsed (t/parse-out out))
-  (when (not parsed)
-    (eprintf "failed to parse test output: %s" out)
-    (break nil))
-  #
-  (def test-results parsed)
   # print out results
   (report test-results err)
   # finish off
@@ -3724,7 +3717,7 @@
 (defn make-run-update
   [filepath &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath out err] (make-and-run filepath opts))
+  (def [ecode test-filepath test-results err] (make-and-run filepath opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   # successful run means no tests to update
@@ -3732,34 +3725,28 @@
     (os/rm test-filepath)
     (break true))
   #
-  (def parsed (t/parse-out out))
-  (when (not parsed)
-    (eprintf "failed to parse test output: %s" out)
-    (break nil))
-  #
-  (def fails (get parsed :fails))
-  (def raw-lines-tbl
-    (tabseq [f :in fails
-             :let [{:name name
-                    :test-value test-value} f
-                   # XXX: assumes `name` is like `line-11`
-                   line-no (scan-number (string/slice name 5))
-                   tv-str (string/format "%j" test-value)]]
-      line-no tv-str))
-  (def lines-tbl
-    (if (get opts :update-first)
-      (let [key-0 (get (sort (keys raw-lines-tbl)) 0)]
-        @{key-0 (get raw-lines-tbl key-0)})
-      raw-lines-tbl))
-  (def ret (r/patch-file filepath lines-tbl))
+  (def fails (get test-results :fails))
+  (def update-info
+    (seq [f :in (if (get opts :update-first)
+                  @[(get fails 0)]
+                  fails)
+          :let [{:name name :test-value test-value} f
+                line-no (-> name
+                            # assumes `name` is like `line-11`
+                            (string/slice (length "line-"))
+                            scan-number)
+                tv-str (string/format "%j" test-value)]]
+      [line-no tv-str]))
+  (def ret (r/patch-file filepath update-info))
   (when (not ret)
     (eprintf "failed to patch file: %s" filepath)
     (break nil))
   #
   (os/rm test-filepath)
-  (break (if (get opts :update-first)
-           :stop
-           :continue)))
+  #
+  (if (get opts :update-first)
+    :stop
+    :continue))
 
 ########################################################################
 

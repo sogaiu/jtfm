@@ -82,14 +82,21 @@
   # run tests and collect output
   (def [ecode out err] (t/run-tests test-filepath opts))
   #
-  [ecode test-filepath out err])
+  (def parsed (t/parse-out out))
+  (when (string? parsed)
+    (eprint "unreadable value in test-value and/or expected-value")
+    (each l (string/split "\n" parsed)
+      (eprintf "  %s" l))
+    (break [nil nil nil nil]))
+  #
+  (def test-results parsed)
+  #
+  [ecode test-filepath test-results err])
 
 (defn report
   [test-results err]
   (v/report test-results)
   (when (and err (pos? (length err)))
-    (print)
-    (print)
     (v/report-stderr err)
     (print))
   (when (and (zero? (get test-results :total-tests))
@@ -100,16 +107,9 @@
 (defn make-run-report
   [filepath &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath out err] (make-and-run filepath opts))
+  (def [ecode test-filepath test-results err] (make-and-run filepath opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
-  #
-  (def parsed (t/parse-out out))
-  (when (not parsed)
-    (eprintf "failed to parse test output: %s" out)
-    (break nil))
-  #
-  (def test-results parsed)
   # print out results
   (report test-results err)
   # finish off
@@ -120,7 +120,7 @@
 (defn make-run-update
   [filepath &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath out err] (make-and-run filepath opts))
+  (def [ecode test-filepath test-results err] (make-and-run filepath opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   # successful run means no tests to update
@@ -128,34 +128,28 @@
     (os/rm test-filepath)
     (break true))
   #
-  (def parsed (t/parse-out out))
-  (when (not parsed)
-    (eprintf "failed to parse test output: %s" out)
-    (break nil))
-  #
-  (def fails (get parsed :fails))
-  (def raw-lines-tbl
-    (tabseq [f :in fails
-             :let [{:name name
-                    :test-value test-value} f
-                   # XXX: assumes `name` is like `line-11`
-                   line-no (scan-number (string/slice name 5))
-                   tv-str (string/format "%j" test-value)]]
-      line-no tv-str))
-  (def lines-tbl
-    (if (get opts :update-first)
-      (let [key-0 (get (sort (keys raw-lines-tbl)) 0)]
-        @{key-0 (get raw-lines-tbl key-0)})
-      raw-lines-tbl))
-  (def ret (r/patch-file filepath lines-tbl))
+  (def fails (get test-results :fails))
+  (def update-info
+    (seq [f :in (if (get opts :update-first)
+                  @[(get fails 0)]
+                  fails)
+          :let [{:name name :test-value test-value} f
+                line-no (-> name
+                            # assumes `name` is like `line-11`
+                            (string/slice (length "line-"))
+                            scan-number)
+                tv-str (string/format "%j" test-value)]]
+      [line-no tv-str]))
+  (def ret (r/patch-file filepath update-info))
   (when (not ret)
     (eprintf "failed to patch file: %s" filepath)
     (break nil))
   #
   (os/rm test-filepath)
-  (break (if (get opts :update-first)
-           :stop
-           :continue)))
+  #
+  (if (get opts :update-first)
+    :stop
+    :continue))
 
 ########################################################################
 

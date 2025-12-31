@@ -125,20 +125,20 @@
     (v/print-color i :cyan)
     (print ")--")
     (print)
-
+    #
     (v/print-color "failed:" :yellow)
     (print)
     (v/print-color test-name :red)
     (print)
-
+    #
     (print)
     (v/print-color "form" :yellow)
     (v/print-form test-form)
-
+    #
     (print)
     (v/print-color "expected" :yellow)
     (v/print-form expected-value)
-
+    #
     (print)
     (v/print-color "actual" :yellow)
     (v/print-form test-value :blue))

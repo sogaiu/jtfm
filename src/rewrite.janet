@@ -784,10 +784,10 @@
               eol-str))))
 
 (defn patch-zloc
-  [a-zloc lines-table]
+  [a-zloc update-info]
   (var zloc a-zloc)
   (var ok? true)
-  (each line (sort (keys lines-table)) # order important
+  (each [line value] update-info
     (when (not zloc)
       (break))
     #
@@ -803,8 +803,6 @@
       (break))
     #
     (def ee-zloc (find-expected-expr ti-zloc))
-    # get value to patch with
-    (def value (get lines-table line))
     (def new-node
       (try (-> (j/par value)
                j/zip-down
@@ -823,7 +821,7 @@
   (when ok? zloc))
 
 (defn patch-file
-  [filepath lines-table]
+  [filepath update-info]
   (def src (slurp filepath))
   (when (empty? src)
     (eprintf "no content for file: %s" filepath)
@@ -833,7 +831,7 @@
     (try (-> src j/par j/zip-down)
       ([e] (eprint e)
            (errorf "failed to create zipper for: %s" filepath))))
-  (def new-zloc (patch-zloc zloc lines-table))
+  (def new-zloc (patch-zloc zloc update-info))
   (when (not new-zloc)
     (break nil))
   #
