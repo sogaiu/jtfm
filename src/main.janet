@@ -72,7 +72,7 @@
   # create test source
   (def result (t/make-tests filepath opts))
   (when (not result)
-    (eprintf "failed to create test file for: %p" filepath)
+    (eprintf "failed to create test file for: %s" filepath)
     (break [nil nil nil nil]))
   #
   (when (= :no-tests result)
@@ -212,18 +212,18 @@
         #
         (= :no-tests result)
         # XXX: the 2 newlines here are cosmetic
-        (eprintf "* no tests detected for: %p\n\n" path)
+        (eprintf "* no tests detected for: %s\n\n" path)
         #
         (nil? result)
         (do
-          (eprintf "failure in: %p" path)
+          (eprintf "failure in: %s" path)
           (os/exit 1))
         #
         (true? result)
         true
         #
         (do
-          (eprintf "Unexpected result %p for: %p" result path)
+          (eprintf "Unexpected result %p for: %s" result path)
           (os/exit 1)))))
   #
   (when (not update?)

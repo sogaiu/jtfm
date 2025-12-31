@@ -3437,7 +3437,7 @@
   (def test-filepath (string fdir "_" fname t/test-file-ext))
   (when (and (not (get opts :overwrite))
              (os/stat test-filepath :mode))
-    (eprintf "test file already exists for: %p" filepath)
+    (eprintf "test file already exists for: %s" filepath)
     (break nil))
   #
   (spit test-filepath test-src)
@@ -3461,7 +3461,7 @@
                           (merge {:out of :err ef}
                                  {"NO_COLOR" (when no-color "1")}))]
           (when (not (zero? ecode))
-            (eprintf "non-zero exit code: %p" ecode))
+            (eprintf "non-zero exit code: %d" ecode))
           #
           (file/flush of)
           (file/flush ef)
@@ -3481,7 +3481,7 @@
 
 ###########################################################################
 
-(def version "2025-12-31_14-18-10")
+(def version "2025-12-31_14-25-31")
 
 (def usage
   ``
@@ -3547,7 +3547,7 @@
   # create test source
   (def result (t/make-tests filepath opts))
   (when (not result)
-    (eprintf "failed to create test file for: %p" filepath)
+    (eprintf "failed to create test file for: %s" filepath)
     (break [nil nil nil nil]))
   #
   (when (= :no-tests result)
@@ -3687,18 +3687,18 @@
         #
         (= :no-tests result)
         # XXX: the 2 newlines here are cosmetic
-        (eprintf "* no tests detected for: %p\n\n" path)
+        (eprintf "* no tests detected for: %s\n\n" path)
         #
         (nil? result)
         (do
-          (eprintf "failure in: %p" path)
+          (eprintf "failure in: %s" path)
           (os/exit 1))
         #
         (true? result)
         true
         #
         (do
-          (eprintf "Unexpected result %p for: %p" result path)
+          (eprintf "Unexpected result %p for: %s" result path)
           (os/exit 1)))))
   #
   (when (not update?)

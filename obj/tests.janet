@@ -14,7 +14,7 @@
   (def test-filepath (string fdir "_" fname t/test-file-ext))
   (when (and (not (get opts :overwrite))
              (os/stat test-filepath :mode))
-    (eprintf "test file already exists for: %p" filepath)
+    (eprintf "test file already exists for: %s" filepath)
     (break nil))
   #
   (spit test-filepath test-src)
@@ -38,7 +38,7 @@
                           (merge {:out of :err ef}
                                  {"NO_COLOR" (when no-color "1")}))]
           (when (not (zero? ecode))
-            (eprintf "non-zero exit code: %p" ecode))
+            (eprintf "non-zero exit code: %d" ecode))
           #
           (file/flush of)
           (file/flush ef)
