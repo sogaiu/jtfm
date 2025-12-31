@@ -74,27 +74,26 @@
   (assertf (number? total-tests) "expected number but found: %n"
            (get meta "tests"))
   (def raw-fails
-    (if (pos? total-fails)
-      (string/split boundary body 0 total-fails)
-      # handle the no "boundary" string case separately, since if
-      # delimiter not found, string/split returns single element and
-      # that is not desired.
-      @[]))
+    (if (= 0 total-fails) # no "boundary" marker
+      # if delimiter not found, string/split returns single element
+      # and that is not desired, so handle separately
+      @[]
+      (string/split boundary body 0 total-fails)))
   (def fails @[])
+  (var unreadable nil)
   (each rf raw-fails
-    (def f
-      (try
-        (do # check if parseable
-          (string/format "%j" rf)
-          (parse rf))
-        ([e]
-          (eprint e)
-          (errorf "unreadable value in: %s" rf))))
+    (def [ok? f] (protect (parse rf)))
+    (when (not ok?)
+      (set unreadable rf)
+      (break))
+    #
     (array/push fails f))
   #
-  @{:total-tests total-tests
-    :total-fails total-fails
-    :fails fails})
+  (if unreadable
+    unreadable
+    @{:total-tests total-tests
+      :total-fails total-fails
+      :fails fails}))
 
 (comment
 
@@ -161,23 +160,19 @@
       "  :test-value <cfunction printf>}" eol
       "########"                          eol))
 
-  (let [err-buf @""]
-    (with-dyns [:err err-buf]
-      [err-buf (protect (parse-out erroring-output))]))
+  (protect (parse-out erroring-output))
   # =>
-  [@"struct and table literals expect even number of arguments\n"
-   [false
-    (string
-      "unreadable value in: "
-      "{ :expected-form 0\n"
-      "  :expected-status true\n"
-      "  :expected-value 0\n"
-      "  :name \"line-4\"\n"
-      "  :passed false\n"
-      "  :test-form printf\n"
-      "  :test-status true\n"
-      "  :test-value <cfunction printf>}\n"
-      "########\n")]]
+  [true
+   (string
+     "{ :expected-form 0\n"
+     "  :expected-status true\n"
+     "  :expected-value 0\n"
+     "  :name \"line-4\"\n"
+     "  :passed false\n"
+     "  :test-form printf\n"
+     "  :test-status true\n"
+     "  :test-value <cfunction printf>}\n"
+     "########\n")]
 
   )
 
