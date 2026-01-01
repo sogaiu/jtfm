@@ -68,12 +68,12 @@
   ``)
 
 (defn make-and-run
-  [filepath &opt opts]
+  [input &opt opts]
   (default opts @{})
   # create test source
-  (def result (t/make-tests filepath opts))
+  (def result (t/make-tests input opts))
   (when (not result)
-    (eprintf "failed to create test file for: %s" filepath)
+    (eprintf "failed to create test file for: %n" input)
     (break [nil nil nil nil]))
   #
   (when (= :no-tests result)
@@ -125,9 +125,9 @@
     (print)))
 
 (defn make-run-report
-  [filepath &opt opts]
+  [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results err] (make-and-run filepath opts))
+  (def [ecode test-filepath test-results err] (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   # print out results
@@ -138,9 +138,9 @@
     true))
 
 (defn make-run-update
-  [filepath &opt opts]
+  [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results err] (make-and-run filepath opts))
+  (def [ecode test-filepath test-results err] (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   # successful run means no tests to update
@@ -156,9 +156,9 @@
           :let [{:line-no line-no :test-value test-value} f
                 tv-str (string/format "%j" test-value)]]
       [line-no tv-str]))
-  (def ret (r/patch-file filepath update-info))
+  (def ret (r/patch input update-info))
   (when (not ret)
-    (eprintf "failed to patch file: %s" filepath)
+    (eprintf "failed to patch: %n" input)
     (break nil))
   #
   (os/rm test-filepath)

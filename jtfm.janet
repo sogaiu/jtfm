@@ -3301,17 +3301,24 @@
 
   )
 
-(defn r/patch-file
-  [filepath update-info]
-  (def src (slurp filepath))
+(defn r/patch
+  [input update-info &opt output]
+  (default output (if (string? input) input @""))
+  (def src (cond (string? input)
+                 (slurp input)
+                 #
+                 (buffer? input)
+                 input
+                 #
+                 (errorf "unexpected type for input: %n" input)))
   (when (empty? src)
-    (eprintf "no content for file: %s" filepath)
+    (eprintf "no content for input: %n" input)
     (break nil))
   # prepare and patch
   (def zloc
     (try (-> src j/par j/zip-down)
       ([e] (eprint e)
-           (errorf "failed to create zipper for: %s" filepath))))
+           (errorf "failed to create zipper for: %n" input))))
   (def new-zloc (r/patch-zloc zloc update-info))
   (when (not new-zloc)
     (break nil))
@@ -3324,8 +3331,42 @@
     (eprintf "unexpected falsy value for new-src")
     (break nil))
   #
-  (spit filepath new-src)
-  true)
+  (cond (buffer? output)
+        (buffer/blit output new-src)
+        #
+        (string? output)
+        (spit output new-src)
+        #
+        (errorf "unexpected value for output: %n" output))
+  #
+  output)
+
+(comment
+
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
+
+  (def src
+    (buffer "(comment"             eol
+            eol
+            "  (+ 1 (- 2"          eol
+            "          (+ 1 2))) " eol
+            "  # =>"               eol
+            "  3"                  eol
+            eol
+            "  )"))
+
+  (r/patch src @[[5 "0"]] @"")
+  # =>
+  (buffer "(comment"             eol
+          eol
+          "  (+ 1 (- 2"          eol
+          "          (+ 1 2))) " eol
+          "  # =>"               eol
+          "  0"                  eol
+          eol
+          "  )")
+
+  )
 
 
 (comment import ./search :prefix "")
@@ -3529,7 +3570,7 @@
 
 ###########################################################################
 
-(def version "2026-01-01_03-02-58")
+(def version "2026-01-01_09-04-21")
 
 (def usage
   ``
@@ -3591,12 +3632,12 @@
   ``)
 
 (defn make-and-run
-  [filepath &opt opts]
+  [input &opt opts]
   (default opts @{})
   # create test source
-  (def result (t/make-tests filepath opts))
+  (def result (t/make-tests input opts))
   (when (not result)
-    (eprintf "failed to create test file for: %s" filepath)
+    (eprintf "failed to create test file for: %n" input)
     (break [nil nil nil nil]))
   #
   (when (= :no-tests result)
@@ -3648,9 +3689,9 @@
     (print)))
 
 (defn make-run-report
-  [filepath &opt opts]
+  [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results err] (make-and-run filepath opts))
+  (def [ecode test-filepath test-results err] (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   # print out results
@@ -3661,9 +3702,9 @@
     true))
 
 (defn make-run-update
-  [filepath &opt opts]
+  [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results err] (make-and-run filepath opts))
+  (def [ecode test-filepath test-results err] (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   # successful run means no tests to update
@@ -3679,9 +3720,9 @@
           :let [{:line-no line-no :test-value test-value} f
                 tv-str (string/format "%j" test-value)]]
       [line-no tv-str]))
-  (def ret (r/patch-file filepath update-info))
+  (def ret (r/patch input update-info))
   (when (not ret)
-    (eprintf "failed to patch file: %s" filepath)
+    (eprintf "failed to patch: %n" input)
     (break nil))
   #
   (os/rm test-filepath)

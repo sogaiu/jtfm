@@ -859,17 +859,24 @@
 
   )
 
-(defn r/patch-file
-  [filepath update-info]
-  (def src (slurp filepath))
+(defn r/patch
+  [input update-info &opt output]
+  (default output (if (string? input) input @""))
+  (def src (cond (string? input)
+                 (slurp input)
+                 #
+                 (buffer? input)
+                 input
+                 #
+                 (errorf "unexpected type for input: %n" input)))
   (when (empty? src)
-    (eprintf "no content for file: %s" filepath)
+    (eprintf "no content for input: %n" input)
     (break nil))
   # prepare and patch
   (def zloc
     (try (-> src j/par j/zip-down)
       ([e] (eprint e)
-           (errorf "failed to create zipper for: %s" filepath))))
+           (errorf "failed to create zipper for: %n" input))))
   (def new-zloc (r/patch-zloc zloc update-info))
   (when (not new-zloc)
     (break nil))
@@ -882,6 +889,40 @@
     (eprintf "unexpected falsy value for new-src")
     (break nil))
   #
-  (spit filepath new-src)
-  true)
+  (cond (buffer? output)
+        (buffer/blit output new-src)
+        #
+        (string? output)
+        (spit output new-src)
+        #
+        (errorf "unexpected value for output: %n" output))
+  #
+  output)
+
+(comment
+
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
+
+  (def src
+    (buffer "(comment"             eol
+            eol
+            "  (+ 1 (- 2"          eol
+            "          (+ 1 2))) " eol
+            "  # =>"               eol
+            "  3"                  eol
+            eol
+            "  )"))
+
+  (r/patch src @[[5 "0"]] @"")
+  # =>
+  (buffer "(comment"             eol
+          eol
+          "  (+ 1 (- 2"          eol
+          "          (+ 1 2))) " eol
+          "  # =>"               eol
+          "  0"                  eol
+          eol
+          "  )")
+
+  )
 
