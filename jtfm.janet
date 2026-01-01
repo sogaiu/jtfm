@@ -3500,12 +3500,12 @@
 
 ###########################################################################
 
-(def version "2025-12-31_15-54-35")
+(def version "2026-01-01_02-37-23")
 
 (def usage
   ``
   Usage: jtfm [<file-or-dir>...]
-         jtfm [-h|--help]
+         jtfm [-h|--help] [-v|--version]
 
   Create and run comment tests...just the facts, ma'am.
 
@@ -3516,6 +3516,7 @@
   Options:
 
     -h, --help             show this output
+    -v, --version          show version information
 
   Configuration:
 

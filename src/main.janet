@@ -11,7 +11,7 @@
 (def usage
   ``
   Usage: jtfm [<file-or-dir>...]
-         jtfm [-h|--help]
+         jtfm [-h|--help] [-v|--version]
 
   Create and run comment tests...just the facts, ma'am.
 
@@ -22,6 +22,7 @@
   Options:
 
     -h, --help             show this output
+    -v, --version          show version information
 
   Configuration:
 
