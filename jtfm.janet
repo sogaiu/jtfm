@@ -3272,6 +3272,35 @@
   #
   (when ok? zloc))
 
+(comment
+
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
+
+  (def src
+    (string "(comment"  eol
+            eol
+            "  (+ 1 2)" eol
+            "  # =>"    eol
+            "  0"       eol
+            eol
+            "  )"))
+
+  (def zloc (-> src j/par j/zip-down))
+
+  (-> (r/patch-zloc zloc @[[4 "3"]])
+      j/root
+      j/gen)
+  # =>
+  (string "(comment"  eol
+          eol
+          "  (+ 1 2)" eol
+          "  # =>"    eol
+          "  3"       eol
+          eol
+          "  )")
+
+  )
+
 (defn r/patch-file
   [filepath update-info]
   (def src (slurp filepath))
@@ -3500,7 +3529,7 @@
 
 ###########################################################################
 
-(def version "2026-01-01_02-37-23")
+(def version "2026-01-01_03-02-58")
 
 (def usage
   ``
