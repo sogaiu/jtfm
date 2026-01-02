@@ -81,26 +81,3 @@
   #
   filepaths)
 
-(defn s/search-paths
-  [query-fn opts]
-  (def {:name name :paths src-paths} opts)
-  #
-  (def all-results @[])
-  (def hit-paths @[])
-  (each path src-paths
-    (def src (slurp path))
-    (when (pos? (length src))
-      (when (or (not name)
-                (string/find name src))
-        (array/push hit-paths path)
-        (def results
-          (try
-            (query-fn src opts)
-            ([e]
-              (eprintf "search failed for: %s" path))))
-        (when (and results (not (empty? results)))
-          (each item results
-            (array/push all-results (merge item {:path path})))))))
-  #
-  [all-results hit-paths])
-
