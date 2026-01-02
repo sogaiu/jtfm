@@ -47,3 +47,48 @@
       (l/elogf "problem executing tests: %p" e)
       [nil nil nil])))
 
+(defn parse-output
+  [out]
+  # see verify.janet
+  (def boundary (buffer/new-filled 80 (chr "#")))
+  (def [test-out results] (string/split boundary out 0 2))
+  #
+  [(parse results) test-out])
+
+(comment
+
+  (def data
+    {:test-form '(+ 1 1)
+     :test-status true
+     :test-value 2
+     :expected-form 3
+     :expected-status true
+     :expected-value 3
+     :line-no 4
+     :passed true
+     :name ""})
+
+  (def separator (buffer/new-filled 80 (chr "#")))
+
+  (def out
+    (string
+      "hello this is a line\n"
+      "and so is this\n"
+      separator "\n"
+      (string/format "%j" data)))
+
+  (parse-output out)
+  # =>
+  [{:expected-form 3
+    :expected-status true
+    :expected-value 3
+    :line-no 4
+    :name ""
+    :passed true
+    :test-form '(+ 1 1)
+    :test-status true
+    :test-value 2}
+   "hello this is a line\nand so is this\n"]
+
+  )
+

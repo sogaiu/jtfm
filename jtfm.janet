@@ -2356,6 +2356,8 @@
     (def test-results
       @{:num-tests (length _verify/test-results)
         :fails fails})
+    # output a separator before the test output
+    (print (string/repeat "#" 80) "\n")
     # report test results
     (printf "%j" test-results)
     # signal if there were any failures
@@ -3460,6 +3462,51 @@
       (l/elogf "problem executing tests: %p" e)
       [nil nil nil])))
 
+(defn t/parse-output
+  [out]
+  # see verify.janet
+  (def boundary (buffer/new-filled 80 (chr "#")))
+  (def [test-out results] (string/split boundary out 0 2))
+  #
+  [(parse results) test-out])
+
+(comment
+
+  (def data
+    {:test-form '(+ 1 1)
+     :test-status true
+     :test-value 2
+     :expected-form 3
+     :expected-status true
+     :expected-value 3
+     :line-no 4
+     :passed true
+     :name ""})
+
+  (def separator (buffer/new-filled 80 (chr "#")))
+
+  (def out
+    (string
+      "hello this is a line\n"
+      "and so is this\n"
+      separator "\n"
+      (string/format "%j" data)))
+
+  (t/parse-output out)
+  # =>
+  [{:expected-form 3
+    :expected-status true
+    :expected-value 3
+    :line-no 4
+    :name ""
+    :passed true
+    :test-form '(+ 1 1)
+    :test-status true
+    :test-value 2}
+   "hello this is a line\nand so is this\n"]
+
+  )
+
 
 (comment import ./output :prefix "")
 (comment import ./log :prefix "")
@@ -3568,22 +3615,26 @@
   (l/log)
   (l/log))
 
-(defn o/report-stderr
-  [err]
-  (when (and err (pos? (length err)))
-    (l/log "------")
-    (l/log "stderr")
-    (l/log "------")
-    (l/log err)
-    (l/log)))
+(defn o/report-std
+  [content title]
+  (when (and content (pos? (length content)))
+    (def separator (string/repeat "-" (length title)))
+    (l/log separator)
+    (l/log title)
+    (l/log separator)
+    (l/log content)))
 
 (defn o/report
-  [test-results err]
+  [test-results out err]
   (o/legacy-report test-results)
+  (when (and out (pos? (length out)))
+    (o/report-std out "stdout")
+    (l/log))
   (when (and err (pos? (length err)))
-    (o/report-stderr err)
+    (o/report-std err "stderr")
     (l/log))
   (when (and (zero? (get test-results :num-tests))
+             (empty? out)
              (empty? err))
     (l/log "no test output...possibly no tests")
     (l/log)))
@@ -3592,7 +3643,7 @@
 
 ###########################################################################
 
-(def version "2026-01-02_12-34-34")
+(def version "2026-01-02_13-44-00")
 
 (def usage
   ``
@@ -3673,7 +3724,7 @@
     (l/elogf "expected non-empty output")
     (l/elogf "possible problem in verify.janet"))
   #
-  (def test-results (parse out))
+  (def [test-results test-out] (t/parse-output out))
   (def fails (get test-results :fails))
   (var test-unreadable? nil)
   (var expected-unreadable? nil)
@@ -3697,19 +3748,20 @@
     (l/elogf fmt-str expected-unreadable?)
     (break [nil nil nil nil]))
   #
-  [ecode test-filepath test-results err])
+  [ecode test-filepath test-results test-out err])
 
 (defn make-run-report
   [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results err] (make-and-run input opts))
+  (def [ecode test-filepath test-results test-out test-err]
+    (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   #
   (def {:report report} opts)
   (default report o/report)
   # print out results
-  (report test-results err)
+  (report test-results test-out test-err)
   # finish off
   (when (zero? ecode)
     (os/rm test-filepath)
@@ -3718,7 +3770,7 @@
 (defn make-run-update
   [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results err] (make-and-run input opts))
+  (def [ecode test-filepath test-results _ _] (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   # successful run means no tests to update

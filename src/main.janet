@@ -88,7 +88,7 @@
     (l/elogf "expected non-empty output")
     (l/elogf "possible problem in verify.janet"))
   #
-  (def test-results (parse out))
+  (def [test-results test-out] (t/parse-output out))
   (def fails (get test-results :fails))
   (var test-unreadable? nil)
   (var expected-unreadable? nil)
@@ -112,19 +112,20 @@
     (l/elogf fmt-str expected-unreadable?)
     (break [nil nil nil nil]))
   #
-  [ecode test-filepath test-results err])
+  [ecode test-filepath test-results test-out err])
 
 (defn make-run-report
   [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results err] (make-and-run input opts))
+  (def [ecode test-filepath test-results test-out test-err]
+    (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   #
   (def {:report report} opts)
   (default report o/report)
   # print out results
-  (report test-results err)
+  (report test-results test-out test-err)
   # finish off
   (when (zero? ecode)
     (os/rm test-filepath)
@@ -133,7 +134,7 @@
 (defn make-run-update
   [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results err] (make-and-run input opts))
+  (def [ecode test-filepath test-results _ _] (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   # successful run means no tests to update

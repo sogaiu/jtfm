@@ -103,22 +103,26 @@
   (l/log)
   (l/log))
 
-(defn report-stderr
-  [err]
-  (when (and err (pos? (length err)))
-    (l/log "------")
-    (l/log "stderr")
-    (l/log "------")
-    (l/log err)
-    (l/log)))
+(defn report-std
+  [content title]
+  (when (and content (pos? (length content)))
+    (def separator (string/repeat "-" (length title)))
+    (l/log separator)
+    (l/log title)
+    (l/log separator)
+    (l/log content)))
 
 (defn report
-  [test-results err]
+  [test-results out err]
   (legacy-report test-results)
+  (when (and out (pos? (length out)))
+    (report-std out "stdout")
+    (l/log))
   (when (and err (pos? (length err)))
-    (report-stderr err)
+    (report-std err "stderr")
     (l/log))
   (when (and (zero? (get test-results :num-tests))
+             (empty? out)
              (empty? err))
     (l/log "no test output...possibly no tests")
     (l/log)))
