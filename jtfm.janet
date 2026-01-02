@@ -3445,12 +3445,7 @@
       (array/push filepaths apath)
       #
       (= :directory mode)
-      (array/concat filepaths (s/find-files apath pred))
-      #
-      (do
-        (eprintf "No such file or not an ordinary file or directory: %s"
-                 apath)
-        (os/exit 1))))
+      (array/concat filepaths (s/find-files apath pred))))
   #
   filepaths)
 
@@ -3548,7 +3543,7 @@
 
 ###########################################################################
 
-(def version "2026-01-02_12-24-30")
+(def version "2026-01-02_12-28-14")
 
 (def usage
   ``

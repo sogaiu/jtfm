@@ -72,12 +72,7 @@
       (array/push filepaths apath)
       #
       (= :directory mode)
-      (array/concat filepaths (s/find-files apath pred))
-      #
-      (do
-        (eprintf "No such file or not an ordinary file or directory: %s"
-                 apath)
-        (os/exit 1))))
+      (array/concat filepaths (s/find-files apath pred))))
   #
   filepaths)
 
