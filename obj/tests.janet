@@ -1,3 +1,4 @@
+(import ./log :prefix "")
 (import ./rewrite :prefix "")
 (import ./utils :prefix "")
 
@@ -14,7 +15,7 @@
   (def test-filepath (string fdir "_" fname t/test-file-ext))
   (when (and (not (get opts :overwrite))
              (os/stat test-filepath :mode))
-    (eprintf "test file already exists for: %s" filepath)
+    (l/elogf "test file already exists for: %s" filepath)
     (break nil))
   #
   (spit test-filepath test-src)
@@ -32,7 +33,7 @@
               ecode
               (os/execute cmd :p {:out of :err ef})]
           (when (not (zero? ecode))
-            (eprintf "non-zero exit code: %d" ecode))
+            (l/elogf "non-zero exit code: %d" ecode))
           #
           (file/flush of)
           (file/flush ef)
@@ -43,6 +44,6 @@
            (file/read of :all)
            (file/read ef :all)])))
     ([e]
-      (eprintf "problem executing tests: %p" e)
+      (l/elogf "problem executing tests: %p" e)
       [nil nil nil])))
 

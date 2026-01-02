@@ -99,6 +99,36 @@
   )
 
 
+(comment import ./log :prefix "")
+(defn l/log
+  [& args]
+  (print ;args))
+
+(defn l/logf
+  [& args]
+  (if (empty? args)
+    (print)
+    (printf ;args)))
+
+(defn l/lof
+  [& args]
+  (prinf ;args))
+
+(defn l/elog
+  [& args]
+  (eprint ;args))
+
+(defn l/elogf
+  [& args]
+  (if (empty? args)
+    (eprint)
+    (eprintf ;args)))
+
+(defn l/elof
+  [& args]
+  (eprinf ;args))
+
+
 (comment import ./rewrite :prefix "")
 (comment import ./jipper :prefix "")
 # bl - begin line
@@ -2256,6 +2286,8 @@
   )
 
 
+(comment import ./log :prefix "")
+
 (comment import ./verify :prefix "")
 # XXX: try to put in file?  had trouble originally when working on
 #      judge-gen.  may be will have more luck?
@@ -2330,117 +2362,6 @@
     (when (not (empty? fails))
       (os/exit 1)))
   ``)
-
-(def v/color-table
-  {:black 30
-   :blue 34
-   :cyan 36
-   :green 32
-   :magenta 35
-   :red 31
-   :white 37
-   :yellow 33})
-
-(defn v/print-color
-  [msg color]
-  (def color-num (get v/color-table color))
-  (assertf color-num "unknown color: %n" color)
-  (def real-msg
-    (if (os/getenv "NO_COLOR")
-      msg
-      (string "\e[" color-num "m" msg "\e[0m")))
-  (prin real-msg))
-
-(comment
-
-  (def [ok? result] (protect (v/print-color "hey" :chartreuse)))
-  # =>
-  [false "unknown color: :chartreuse"]
-
-  )
-
-(defn v/dashes
-  [&opt n]
-  (default n 60)
-  (string/repeat "-" n))
-
-(defn v/print-dashes
-  [&opt n]
-  (print (v/dashes n)))
-
-(defn v/print-form
-  [form &opt color]
-  (def buf @"")
-  (with-dyns [:out buf]
-    (printf "%m" form))
-  (def msg (string/trimr buf))
-  (print ":")
-  (if color
-    (v/print-color msg color)
-    (prin msg))
-  (print))
-
-(defn v/report
-  [{:num-tests total-tests :fails fails}]
-  (def total-passed (- total-tests (length fails)))
-  (var i 0)
-  (each f fails
-    (def {:test-value test-value
-          :expected-value expected-value
-          :name test-name
-          :passed test-passed
-          :test-form test-form} f)
-    (++ i)
-    (print)
-    (prin "--(")
-    (v/print-color i :cyan)
-    (print ")--")
-    (print)
-    #
-    (v/print-color "failed:" :yellow)
-    (print)
-    (v/print-color test-name :red)
-    (print)
-    #
-    (print)
-    (v/print-color "form" :yellow)
-    (v/print-form test-form)
-    #
-    (print)
-    (v/print-color "expected" :yellow)
-    (v/print-form expected-value)
-    #
-    (print)
-    (v/print-color "actual" :yellow)
-    (v/print-form test-value :blue))
-  (when (zero? (length fails))
-    (print)
-    (print "No tests failed."))
-  # summarize totals
-  (print)
-  (v/print-dashes)
-  (when (= 0 total-tests)
-    (print "No tests found, so no judgements made.")
-    (break true))
-  (if (not= total-passed total-tests)
-    (v/print-color total-passed :red)
-    (v/print-color total-passed :green))
-  (prin " of ")
-  (v/print-color total-tests :green)
-  (print " passed")
-  (v/print-dashes)
-  # extra newlines from original report function handling out
-  (print)
-  (print))
-
-(defn v/report-stderr
-  [err]
-  (when (and err (pos? (length err)))
-    (print "------")
-    (print "stderr")
-    (print "------")
-    (print err)
-    (print)))
 
 
 
@@ -3251,7 +3172,7 @@
                         (and (= :comment n-type)
                              (= bl line)))))
     (when (not ti-zloc)
-      (eprintf "failed to find test indicator at line: %d" line)
+      (l/elogf "failed to find test indicator at line: %d" line)
       (set ok? false)
       (break))
     #
@@ -3260,12 +3181,12 @@
       (try (-> (j/par value)
                j/zip-down
                j/node)
-        ([e] (eprint e)
-             (errorf "failed to create node for value: %n" value))))
+        ([e] (l/elogf e)
+             (l/elogf "failed to create node for value: %n" value))))
     # patch with value
     (def new-zloc (j/replace ee-zloc new-node))
     (when (not new-zloc)
-      (eprintf "failed to replace with new node: %n" new-node)
+      (l/elogf "failed to replace with new node: %n" new-node)
       (set ok? false)
       (break))
     #
@@ -3313,7 +3234,7 @@
                  #
                  (errorf "unexpected type for input: %n" input)))
   (when (empty? src)
-    (eprintf "no content for input: %n" input)
+    (l/elogf "no content for input: %n" input)
     (break nil))
   # prepare and patch
   (def zloc
@@ -3329,7 +3250,7 @@
       ([e] (eprint e)
            (errorf "failed to create new src for: %n" ))))
   (when (not new-src)
-    (eprintf "unexpected falsy value for new-src")
+    (l/elogf "unexpected falsy value for new-src")
     (break nil))
   #
   (cond (buffer? output)
@@ -3451,6 +3372,8 @@
 
 
 (comment import ./tests :prefix "")
+(comment import ./log :prefix "")
+
 (comment import ./rewrite :prefix "")
 
 (comment import ./utils :prefix "")
@@ -3505,7 +3428,7 @@
   (def test-filepath (string fdir "_" fname t/test-file-ext))
   (when (and (not (get opts :overwrite))
              (os/stat test-filepath :mode))
-    (eprintf "test file already exists for: %s" filepath)
+    (l/elogf "test file already exists for: %s" filepath)
     (break nil))
   #
   (spit test-filepath test-src)
@@ -3523,7 +3446,7 @@
               ecode
               (os/execute cmd :p {:out of :err ef})]
           (when (not (zero? ecode))
-            (eprintf "non-zero exit code: %d" ecode))
+            (l/elogf "non-zero exit code: %d" ecode))
           #
           (file/flush of)
           (file/flush ef)
@@ -3534,16 +3457,142 @@
            (file/read of :all)
            (file/read ef :all)])))
     ([e]
-      (eprintf "problem executing tests: %p" e)
+      (l/elogf "problem executing tests: %p" e)
       [nil nil nil])))
 
 
-(comment import ./verify :prefix "")
+(comment import ./output :prefix "")
+(comment import ./log :prefix "")
+
+
+(def o/color-table
+  {:black 30
+   :blue 34
+   :cyan 36
+   :green 32
+   :magenta 35
+   :red 31
+   :white 37
+   :yellow 33})
+
+(defn o/print-color
+  [msg color]
+  (def color-num (get o/color-table color))
+  (assertf color-num "unknown color: %n" color)
+  (def real-msg
+    (if (os/getenv "NO_COLOR")
+      msg
+      (string "\e[" color-num "m" msg "\e[0m")))
+  (l/lof real-msg))
+
+(comment
+
+  (def [ok? result] (protect (o/print-color "hey" :chartreuse)))
+  # =>
+  [false "unknown color: :chartreuse"]
+
+  )
+
+(defn o/dashes
+  [&opt n]
+  (default n 60)
+  (string/repeat "-" n))
+
+(defn o/print-dashes
+  [&opt n]
+  (l/log (o/dashes n)))
+
+(defn o/print-form
+  [form &opt color]
+  (def buf @"")
+  (with-dyns [:out buf]
+    (printf "%m" form))
+  (def msg (string/trimr buf))
+  (l/log ":")
+  (if color
+    (o/print-color msg color)
+    (l/lof msg))
+  (l/log))
+
+(defn o/legacy-report
+  [{:num-tests total-tests :fails fails}]
+  (def total-passed (- total-tests (length fails)))
+  (var i 0)
+  (each f fails
+    (def {:test-value test-value
+          :expected-value expected-value
+          :name test-name
+          :line-no line-no
+          :passed test-passed
+          :test-form test-form} f)
+    (++ i)
+    (l/log)
+    (l/lof "--(")
+    (o/print-color i :cyan)
+    (l/log ")--")
+    (l/log)
+    #
+    (o/print-color "failed:" :yellow)
+    (l/log)
+    (o/print-color (string/format "line-%d" line-no) :red)
+    (l/log)
+    #
+    (l/log)
+    (o/print-color "form" :yellow)
+    (o/print-form test-form)
+    #
+    (l/log)
+    (o/print-color "expected" :yellow)
+    (o/print-form expected-value)
+    #
+    (l/log)
+    (o/print-color "actual" :yellow)
+    (o/print-form test-value :blue))
+  (when (zero? (length fails))
+    (l/log)
+    (l/log "No tests failed."))
+  # summarize totals
+  (l/log)
+  (o/print-dashes)
+  (when (= 0 total-tests)
+    (l/log "No tests found, so no judgements made.")
+    (break true))
+  (if (not= total-passed total-tests)
+    (o/print-color total-passed :red)
+    (o/print-color total-passed :green))
+  (l/lof " of ")
+  (o/print-color total-tests :green)
+  (l/log " passed")
+  (o/print-dashes)
+  # extra newlines from original report function handling out
+  (l/log)
+  (l/log))
+
+(defn o/report-stderr
+  [err]
+  (when (and err (pos? (length err)))
+    (l/log "------")
+    (l/log "stderr")
+    (l/log "------")
+    (l/log err)
+    (l/log)))
+
+(defn o/report
+  [test-results err]
+  (o/legacy-report test-results)
+  (when (and err (pos? (length err)))
+    (o/report-stderr err)
+    (l/log))
+  (when (and (zero? (get test-results :num-tests))
+             (empty? err))
+    (l/log "no test output...possibly no tests")
+    (l/log)))
+
 
 
 ###########################################################################
 
-(def version "2026-01-02_12-28-14")
+(def version "2026-01-02_12-34-34")
 
 (def usage
   ``
@@ -3610,7 +3659,7 @@
   # create test source
   (def result (t/make-tests input opts))
   (when (not result)
-    (eprintf "failed to create test file for: %n" input)
+    (l/elogf "failed to create test file for: %n" input)
     (break [nil nil nil nil]))
   #
   (when (= :no-tests result)
@@ -3621,8 +3670,8 @@
   (def [ecode out err] (t/run-tests test-filepath))
   #
   (when (empty? out)
-    (eprintf "expected non-empty output")
-    (eprintf "possible problem in verify.janet"))
+    (l/elogf "expected non-empty output")
+    (l/elogf "possible problem in verify.janet"))
   #
   (def test-results (parse out))
   (def fails (get test-results :fails))
@@ -3639,27 +3688,16 @@
   #
   (def fmt-str (if (get opts :no-color) "%m" "%M"))
   (when test-unreadable?
-    (eprint "unreadable value in test-value")
-    (eprintf fmt-str test-unreadable?)
+    (l/elogf "unreadable value in test-value")
+    (l/elogf fmt-str test-unreadable?)
     (break [nil nil nil nil]))
   #
   (when expected-unreadable?
-    (eprint "unreadable value in expected-value")
-    (eprintf fmt-str expected-unreadable?)
+    (l/elogf "unreadable value in expected-value")
+    (l/elogf fmt-str expected-unreadable?)
     (break [nil nil nil nil]))
   #
   [ecode test-filepath test-results err])
-
-(defn report
-  [test-results err]
-  (v/report test-results)
-  (when (and err (pos? (length err)))
-    (v/report-stderr err)
-    (print))
-  (when (and (zero? (get test-results :num-tests))
-             (empty? err))
-    (print "no test output...possibly no tests")
-    (print)))
 
 (defn make-run-report
   [input &opt opts]
@@ -3667,6 +3705,9 @@
   (def [ecode test-filepath test-results err] (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
+  #
+  (def {:report report} opts)
+  (default report o/report)
   # print out results
   (report test-results err)
   # finish off
@@ -3695,7 +3736,7 @@
       [line-no tv-str]))
   (def ret (r/patch input update-info))
   (when (not ret)
-    (eprintf "failed to patch: %n" input)
+    (l/elogf "failed to patch: %n" input)
     (break nil))
   #
   (os/rm test-filepath)
@@ -3711,11 +3752,11 @@
   (def opts (a/parse-args (drop 1 args)))
   #
   (when (get opts :show-help)
-    (print usage)
+    (l/logf usage)
     (os/exit 0))
   #
   (when (get opts :show-version)
-    (print version)
+    (l/logf version)
     (os/exit 0))
   #
   (def update? (or (get opts :update) (get opts :update-first)))
@@ -3730,7 +3771,7 @@
   (each path src-filepaths
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
-      (print path)
+      (l/logf path)
       (def result
         (if update?
           (make-run-update path opts)
@@ -3738,29 +3779,29 @@
       (cond
         (= :stop result)
         (do
-          (printf "Test updated in: %s" path)
+          (l/logf "Test updated in: %s" path)
           (os/exit 0))
         #
         (= :continue result)
-        (printf "Test(s) updated in: %s" path)
+        (l/logf "Test(s) updated in: %s" path)
         #
         (= :no-tests result)
         # XXX: the 2 newlines here are cosmetic
-        (eprintf "* no tests detected for: %s\n\n" path)
+        (l/elogf "* no tests detected for: %s\n\n" path)
         #
         (nil? result)
         (do
-          (eprintf "failure in: %s" path)
+          (l/elogf "failure in: %s" path)
           (os/exit 1))
         #
         (true? result)
         true
         #
         (do
-          (eprintf "Unexpected result %p for: %s" result path)
+          (l/elogf "Unexpected result %p for: %s" result path)
           (os/exit 1)))))
   #
   (when (not update?)
-    (printf "All tests completed successfully in %d file(s)."
+    (l/logf "All tests completed successfully in %d file(s)."
             (length src-filepaths))))
 

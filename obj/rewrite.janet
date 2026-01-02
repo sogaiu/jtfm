@@ -1,4 +1,5 @@
 (import ./jipper :prefix "")
+(import ./log :prefix "")
 (import ./verify :prefix "")
 
 # at its simplest, a test is expressed like:
@@ -808,7 +809,7 @@
                         (and (= :comment n-type)
                              (= bl line)))))
     (when (not ti-zloc)
-      (eprintf "failed to find test indicator at line: %d" line)
+      (l/elogf "failed to find test indicator at line: %d" line)
       (set ok? false)
       (break))
     #
@@ -817,12 +818,12 @@
       (try (-> (j/par value)
                j/zip-down
                j/node)
-        ([e] (eprint e)
-             (errorf "failed to create node for value: %n" value))))
+        ([e] (l/elogf e)
+             (l/elogf "failed to create node for value: %n" value))))
     # patch with value
     (def new-zloc (j/replace ee-zloc new-node))
     (when (not new-zloc)
-      (eprintf "failed to replace with new node: %n" new-node)
+      (l/elogf "failed to replace with new node: %n" new-node)
       (set ok? false)
       (break))
     #
@@ -870,7 +871,7 @@
                  #
                  (errorf "unexpected type for input: %n" input)))
   (when (empty? src)
-    (eprintf "no content for input: %n" input)
+    (l/elogf "no content for input: %n" input)
     (break nil))
   # prepare and patch
   (def zloc
@@ -886,7 +887,7 @@
       ([e] (eprint e)
            (errorf "failed to create new src for: %n" ))))
   (when (not new-src)
-    (eprintf "unexpected falsy value for new-src")
+    (l/elogf "unexpected falsy value for new-src")
     (break nil))
   #
   (cond (buffer? output)

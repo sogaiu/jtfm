@@ -1,8 +1,9 @@
 (import ./args :as a)
+(import ./log :as l)
 (import ./rewrite :as r)
 (import ./search :as s)
 (import ./tests :as t)
-(import ./verify :as v)
+(import ./output :as o)
 
 ###########################################################################
 
@@ -73,7 +74,7 @@
   # create test source
   (def result (t/make-tests input opts))
   (when (not result)
-    (eprintf "failed to create test file for: %n" input)
+    (l/elogf "failed to create test file for: %n" input)
     (break [nil nil nil nil]))
   #
   (when (= :no-tests result)
@@ -84,8 +85,8 @@
   (def [ecode out err] (t/run-tests test-filepath))
   #
   (when (empty? out)
-    (eprintf "expected non-empty output")
-    (eprintf "possible problem in verify.janet"))
+    (l/elogf "expected non-empty output")
+    (l/elogf "possible problem in verify.janet"))
   #
   (def test-results (parse out))
   (def fails (get test-results :fails))
@@ -102,27 +103,16 @@
   #
   (def fmt-str (if (get opts :no-color) "%m" "%M"))
   (when test-unreadable?
-    (eprint "unreadable value in test-value")
-    (eprintf fmt-str test-unreadable?)
+    (l/elogf "unreadable value in test-value")
+    (l/elogf fmt-str test-unreadable?)
     (break [nil nil nil nil]))
   #
   (when expected-unreadable?
-    (eprint "unreadable value in expected-value")
-    (eprintf fmt-str expected-unreadable?)
+    (l/elogf "unreadable value in expected-value")
+    (l/elogf fmt-str expected-unreadable?)
     (break [nil nil nil nil]))
   #
   [ecode test-filepath test-results err])
-
-(defn report
-  [test-results err]
-  (v/report test-results)
-  (when (and err (pos? (length err)))
-    (v/report-stderr err)
-    (print))
-  (when (and (zero? (get test-results :num-tests))
-             (empty? err))
-    (print "no test output...possibly no tests")
-    (print)))
 
 (defn make-run-report
   [input &opt opts]
@@ -130,6 +120,9 @@
   (def [ecode test-filepath test-results err] (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
+  #
+  (def {:report report} opts)
+  (default report o/report)
   # print out results
   (report test-results err)
   # finish off
@@ -158,7 +151,7 @@
       [line-no tv-str]))
   (def ret (r/patch input update-info))
   (when (not ret)
-    (eprintf "failed to patch: %n" input)
+    (l/elogf "failed to patch: %n" input)
     (break nil))
   #
   (os/rm test-filepath)
@@ -174,11 +167,11 @@
   (def opts (a/parse-args (drop 1 args)))
   #
   (when (get opts :show-help)
-    (print usage)
+    (l/logf usage)
     (os/exit 0))
   #
   (when (get opts :show-version)
-    (print version)
+    (l/logf version)
     (os/exit 0))
   #
   (def update? (or (get opts :update) (get opts :update-first)))
@@ -193,7 +186,7 @@
   (each path src-filepaths
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
-      (print path)
+      (l/logf path)
       (def result
         (if update?
           (make-run-update path opts)
@@ -201,29 +194,29 @@
       (cond
         (= :stop result)
         (do
-          (printf "Test updated in: %s" path)
+          (l/logf "Test updated in: %s" path)
           (os/exit 0))
         #
         (= :continue result)
-        (printf "Test(s) updated in: %s" path)
+        (l/logf "Test(s) updated in: %s" path)
         #
         (= :no-tests result)
         # XXX: the 2 newlines here are cosmetic
-        (eprintf "* no tests detected for: %s\n\n" path)
+        (l/elogf "* no tests detected for: %s\n\n" path)
         #
         (nil? result)
         (do
-          (eprintf "failure in: %s" path)
+          (l/elogf "failure in: %s" path)
           (os/exit 1))
         #
         (true? result)
         true
         #
         (do
-          (eprintf "Unexpected result %p for: %s" result path)
+          (l/elogf "Unexpected result %p for: %s" result path)
           (os/exit 1)))))
   #
   (when (not update?)
-    (printf "All tests completed successfully in %d file(s)."
+    (l/logf "All tests completed successfully in %d file(s)."
             (length src-filepaths))))
 
