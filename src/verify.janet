@@ -42,31 +42,32 @@
 
   (defn _verify/report
     []
-    # find test failures
-    (def fails (filter |(not (get $ :passed)) _verify/test-results))
+    # find and massage failures
+    (def fails
+      (keep (fn [r]
+              (when (not (get r :passed))
+                (def t-value (get r :test-value))
+                (def [tr ts] (protect (string/format "%j" t-value)))
+                (when (not tr)
+                  (-> r
+                      (put :test-value (string/format "%m" t-value))
+                      (put :test-unreadable true)))
+                (def e-value (get r :expected-value))
+                (def [er es] (protect (string/format "%j" e-value)))
+                (when (not er)
+                  (-> r
+                      (put :expected-value (string/format "%m" e-value))
+                      (put :expected-unreadable true)))
+                #
+                r))
+            _verify/test-results))
     # prepare test results
-    (def test-results @{:num-tests (length _verify/test-results)})
-    (def safe-fails
-      (map (fn [f]
-             (def t-value (get f :test-value))
-             (def [tr ts] (protect (string/format "%j" t-value)))
-             (when (not tr)
-               (-> f
-                   (put :test-value (string/format "%m" t-value))
-                   (put :test-unreadable true)))
-             (def e-value (get f :expected-value))
-             (def [er es] (protect (string/format "%j" e-value)))
-             (when (not er)
-               (-> f
-                   (put :expected-value (string/format "%m" e-value))
-                   (put :expected-unreadable true)))
-             #
-             f)
-           fails))
-    (put test-results :fails safe-fails)
+    (def test-results
+      @{:num-tests (length _verify/test-results)
+        :fails fails})
     # report test results
     (printf "%j" test-results)
-    # abort if there were any failures
+    # signal if there were any failures
     (when (not (empty? fails))
       (os/exit 1)))
   ``)
