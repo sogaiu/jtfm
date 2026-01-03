@@ -50,8 +50,10 @@
 (defn t/parse-output
   [out]
   # see verify.janet
-  (def boundary (buffer/new-filled 80 (chr "#")))
-  (def [test-out results] (string/split boundary out 0 2))
+  (def boundary (buffer/new-filled 72 (chr "#")))
+  (def b-idx (last (string/find-all boundary out)))
+  (assertf b-idx "failed to find boundary in output: %n" out)
+  (def [test-out results] (string/split boundary out b-idx))
   #
   [(parse results) test-out])
 
@@ -68,7 +70,7 @@
      :passed true
      :name ""})
 
-  (def separator (buffer/new-filled 80 (chr "#")))
+  (def separator (buffer/new-filled 72 (chr "#")))
 
   (def out
     (string

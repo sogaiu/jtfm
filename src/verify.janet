@@ -66,7 +66,7 @@
       @{:num-tests (length _verify/test-results)
         :fails fails})
     # output a separator before the test output
-    (print (string/repeat "#" 80) "\n")
+    (print (string/repeat "#" 72) "\n")
     # report test results
     (printf "%j" test-results)
     # signal if there were any failures

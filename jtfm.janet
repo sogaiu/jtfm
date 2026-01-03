@@ -2357,7 +2357,7 @@
       @{:num-tests (length _verify/test-results)
         :fails fails})
     # output a separator before the test output
-    (print (string/repeat "#" 80) "\n")
+    (print (string/repeat "#" 72) "\n")
     # report test results
     (printf "%j" test-results)
     # signal if there were any failures
@@ -3465,8 +3465,10 @@
 (defn t/parse-output
   [out]
   # see verify.janet
-  (def boundary (buffer/new-filled 80 (chr "#")))
-  (def [test-out results] (string/split boundary out 0 2))
+  (def boundary (buffer/new-filled 72 (chr "#")))
+  (def b-idx (last (string/find-all boundary out)))
+  (assertf b-idx "failed to find boundary in output: %n" out)
+  (def [test-out results] (string/split boundary out b-idx))
   #
   [(parse results) test-out])
 
@@ -3483,7 +3485,7 @@
      :passed true
      :name ""})
 
-  (def separator (buffer/new-filled 80 (chr "#")))
+  (def separator (buffer/new-filled 72 (chr "#")))
 
   (def out
     (string
@@ -3643,7 +3645,7 @@
 
 ###########################################################################
 
-(def version "2026-01-02_13-44-00")
+(def version "2026-01-03_13-56-23")
 
 (def usage
   ``
