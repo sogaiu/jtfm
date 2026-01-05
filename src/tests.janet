@@ -1,4 +1,4 @@
-(import ./log :as l)
+(import ./errors :as e)
 (import ./rewrite :as r)
 (import ./utils :as u)
 
@@ -6,6 +6,8 @@
 
 (defn make-tests
   [in-path &opt opts]
+  (def b {:in "make-tests" :args {:in-path in-path :opts opts}})
+  #
   (def src (slurp in-path))
   (def test-src (r/rewrite-as-test-file src))
   (when (not test-src)
@@ -15,7 +17,8 @@
   (def test-path (string fdir "_" fname test-file-ext))
   (when (and (not (get opts :overwrite))
              (os/stat test-path :mode))
-    (l/elogf "test file already exists for: %s" in-path)
+    (e/emf (merge b {:locals {:test-path test-path}})
+           "test file already exists for: %s" in-path)
     (break nil))
   #
   (spit test-path test-src)
@@ -24,6 +27,8 @@
 
 (defn run-tests
   [test-path]
+  (def b {:in "run-tests" :args {:test-path test-path}})
+  #
   (try
     (with [of (file/temp)]
       (with [ef (file/temp)]
@@ -32,8 +37,6 @@
               ["janet" "-e" (string "(dofile `" test-path "`)")]
               ecode
               (os/execute cmd :p {:out of :err ef})]
-          (when (not (zero? ecode))
-            (l/elogf "non-zero exit code: %d" ecode))
           #
           (file/flush of)
           (file/flush ef)
@@ -44,15 +47,18 @@
            (file/read of :all)
            (file/read ef :all)])))
     ([e]
-      (l/elogf "problem executing tests: %p" e)
-      [nil nil nil])))
+      (e/emf (merge b {:e-via-try e})
+             "problem running tests in: %s" test-path))))
 
 (defn parse-output
   [out]
+  (def b {:in "parse-output" :args {:out out}})
   # see verify.janet
   (def boundary (buffer/new-filled 72 (chr "#")))
   (def b-idx (last (string/find-all boundary out)))
-  (assertf b-idx "failed to find boundary in output: %n" out)
+  (when (not b-idx)
+    (e/emf b "failed to find boundary in output: %n" out))
+  #
   (def [test-out results] (string/split boundary out b-idx))
   #
   [(parse results) test-out])

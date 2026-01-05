@@ -1,39 +1,42 @@
-(import ./log :prefix "")
+(import ./errors :prefix "")
 (import ./rewrite :prefix "")
 (import ./utils :prefix "")
 
 (def t/test-file-ext ".jtfm")
 
 (defn t/make-tests
-  [filepath &opt opts]
-  (def src (slurp filepath))
+  [in-path &opt opts]
+  (def b {:in "make-tests" :args {:in-path in-path :opts opts}})
+  #
+  (def src (slurp in-path))
   (def test-src (r/rewrite-as-test-file src))
   (when (not test-src)
     (break :no-tests))
   #
-  (def [fdir fname] (u/parse-path filepath))
-  (def test-filepath (string fdir "_" fname t/test-file-ext))
+  (def [fdir fname] (u/parse-path in-path))
+  (def test-path (string fdir "_" fname t/test-file-ext))
   (when (and (not (get opts :overwrite))
-             (os/stat test-filepath :mode))
-    (l/elogf "test file already exists for: %s" filepath)
+             (os/stat test-path :mode))
+    (e/emf (merge b {:locals {:test-path test-path}})
+           "test file already exists for: %s" in-path)
     (break nil))
   #
-  (spit test-filepath test-src)
+  (spit test-path test-src)
   #
-  test-filepath)
+  test-path)
 
 (defn t/run-tests
-  [test-filepath]
+  [test-path]
+  (def b {:in "run-tests" :args {:test-path test-path}})
+  #
   (try
     (with [of (file/temp)]
       (with [ef (file/temp)]
         (let [# prevents any contained `main` functions from executing
               cmd
-              ["janet" "-e" (string "(dofile `" test-filepath "`)")]
+              ["janet" "-e" (string "(dofile `" test-path "`)")]
               ecode
               (os/execute cmd :p {:out of :err ef})]
-          (when (not (zero? ecode))
-            (l/elogf "non-zero exit code: %d" ecode))
           #
           (file/flush of)
           (file/flush ef)
@@ -44,15 +47,18 @@
            (file/read of :all)
            (file/read ef :all)])))
     ([e]
-      (l/elogf "problem executing tests: %p" e)
-      [nil nil nil])))
+      (e/emf (merge b {:e-via-try e})
+             "problem running tests in: %s" test-path))))
 
 (defn t/parse-output
   [out]
+  (def b {:in "parse-output" :args {:out out}})
   # see verify.janet
   (def boundary (buffer/new-filled 72 (chr "#")))
   (def b-idx (last (string/find-all boundary out)))
-  (assertf b-idx "failed to find boundary in output: %n" out)
+  (when (not b-idx)
+    (e/emf b "failed to find boundary in output: %n" out))
+  #
   (def [test-out results] (string/split boundary out b-idx))
   #
   [(parse results) test-out])

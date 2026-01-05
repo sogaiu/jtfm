@@ -1,4 +1,5 @@
 (import ./args :prefix "")
+(import ./errors :prefix "")
 (import ./log :prefix "")
 (import ./rewrite :prefix "")
 (import ./search :prefix "")
@@ -70,23 +71,24 @@
 
 (defn make-and-run
   [input &opt opts]
+  (def b @{:in "make-and-run" :args {:input input :opts opts}})
+  #
   (default opts @{})
   # create test source
   (def result (t/make-tests input opts))
   (when (not result)
-    (l/elogf "failed to create test file for: %n" input)
-    (break [nil nil nil nil]))
+    (e/emf b "failed to create test file for: %n" input))
   #
   (when (= :no-tests result)
     (break [:no-tests nil nil nil]))
   #
-  (def test-filepath result)
+  (def test-path result)
   # run tests and collect output
-  (def [ecode out err] (t/run-tests test-filepath))
+  (def [ecode out err] (t/run-tests test-path))
   #
   (when (empty? out)
-    (l/elogf "expected non-empty output")
-    (l/elogf "possible problem in verify.janet"))
+    (e/emf (merge b {:locals {:ecode ecode :out out :err err}})
+           "out should be non-empty - review verify.janet"))
   #
   (def [test-results test-out] (t/parse-output out))
   (def fails (get test-results :fails))
@@ -101,23 +103,21 @@
       (set expected-unreadable? f)
       (break)))
   #
-  (def fmt-str (if (get opts :no-color) "%m" "%M"))
+  (def fmt-str
+    (string/format "unreadable value in:\n%s"
+                   (if (get opts :no-color) "%m" "%M")))
   (when test-unreadable?
-    (l/elogf "unreadable value in test-value")
-    (l/elogf fmt-str test-unreadable?)
-    (break [nil nil nil nil]))
+    (e/emf b fmt-str test-unreadable?))
   #
   (when expected-unreadable?
-    (l/elogf "unreadable value in expected-value")
-    (l/elogf fmt-str expected-unreadable?)
-    (break [nil nil nil nil]))
+    (e/emf b fmt-str expected-unreadable?))
   #
-  [ecode test-filepath test-results test-out err])
+  [ecode test-path test-results test-out err])
 
 (defn make-run-report
   [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results test-out test-err]
+  (def [ecode test-path test-results test-out test-err]
     (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
@@ -128,18 +128,19 @@
   (report test-results test-out test-err)
   # finish off
   (when (zero? ecode)
-    (os/rm test-filepath)
+    (os/rm test-path)
     true))
 
 (defn make-run-update
   [input &opt opts]
+  (def b @{:in "make-run-update" :args {:input input :opts opts}})
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results _ _] (make-and-run input opts))
+  (def [ecode test-path test-results _ _] (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   # successful run means no tests to update
   (when (zero? ecode)
-    (os/rm test-filepath)
+    (os/rm test-path)
     (break true))
   #
   (def fails (get test-results :fails))
@@ -152,10 +153,10 @@
       [line-no tv-str]))
   (def ret (r/patch input update-info))
   (when (not ret)
-    (l/elogf "failed to patch: %n" input)
-    (break nil))
+    (e/emf (merge b {:locals {:fails fails :update-info update-info}})
+           "failed to patch: %n" input))
   #
-  (os/rm test-filepath)
+  (os/rm test-path)
   #
   (if (get opts :update-first)
     :stop
@@ -165,6 +166,8 @@
 
 (defn main
   [& args]
+  (def b @{:in "main" :args {:args args}})
+  #
   (def opts (a/parse-args (drop 1 args)))
   #
   (when (get opts :show-help)
@@ -180,44 +183,50 @@
   (def includes (get opts :includes))
   (def excludes (get opts :excludes))
   #
-  (def src-filepaths
+  (def src-paths
     (s/collect-paths includes |(or (string/has-suffix? ".janet" $)
                                    (s/has-janet-shebang? $))))
+  #
+  (put b :locals @{:opts opts :update? update?
+                   :includes includes :excludes excludes
+                   :src-paths src-paths})
   # generate tests, run tests, and update / report
-  (each path src-filepaths
+  (each path src-paths
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
-      (l/logf path)
-      (def result
-        (if update?
-          (make-run-update path opts)
-          (make-run-report path opts)))
-      (cond
-        (= :stop result)
+      (put-in b [:locals :path] path)
+      (try
         (do
-          (l/logf "Test updated in: %s" path)
-          (os/exit 0))
-        #
-        (= :continue result)
-        (l/logf "Test(s) updated in: %s" path)
-        #
-        (= :no-tests result)
-        # XXX: the 2 newlines here are cosmetic
-        (l/elogf "* no tests detected for: %s\n\n" path)
-        #
-        (nil? result)
-        (do
-          (l/elogf "failure in: %s" path)
-          (os/exit 1))
-        #
-        (true? result)
-        true
-        #
-        (do
-          (l/elogf "Unexpected result %p for: %s" result path)
+          (l/logf path)
+          (def result (if update?
+                        (make-run-update path opts)
+                        (make-run-report path opts)))
+          (put-in b [:locals :result] result)
+          (cond
+            (= :stop result)
+            (do
+              (l/logf "Test updated in: %s" path)
+              (os/exit 0))
+            #
+            (= :continue result)
+            (l/logf "Test(s) updated in: %s" path)
+            #
+            (= :no-tests result)
+            # XXX: the 2 newlines here are cosmetic
+            (l/elogf "* no tests detected for: %s\n\n" path)
+            #
+            (nil? result)
+            (e/emf b "failure in: %s" path)
+            #
+            (true? result)
+            true
+            #
+            (e/emf b "unexpected result %p for: %s" result path)))
+        ([e]
+          (e/show e)
           (os/exit 1)))))
   #
   (when (not update?)
     (l/logf "All tests completed successfully in %d file(s)."
-            (length src-filepaths))))
+            (length src-paths))))
 

@@ -1,5 +1,9 @@
+(import ./errors :as e)
+
 (defn parse-args
   [args]
+  (def b {:in "parse-args" :args {:args args}})
+  #
   (def the-args (array ;args))
   #
   (def head (get the-args 0))
@@ -25,10 +29,11 @@
         @{}
         (let [parsed
               (try (parse (string "@" head))
-                ([e] (eprint e)
-                     (errorf "failed to parse options: %n" head)))]
-          (assertf (and parsed (table? parsed))
-                   "expected table but found: %s" (type parsed))
+                ([e] (e/emf (merge b {:e-via-try e})
+                            "failed to parse options: %n" head)))]
+          (when (not (and parsed (table? parsed)))
+            (e/emf b "expected table but found: %s" (type parsed)))
+          #
           (array/remove the-args 0)
           parsed))
       @{}))
@@ -40,16 +45,22 @@
       [the-args @[]]
       # conf file
       (= :file (os/stat conf-file :mode))
-      (let [conf (try (parse (slurp conf-file))
-                   ([e] (error e)))]
-        (assertf conf "failed to parse: %s" conf-file)
-        (assertf (dictionary? conf)
-                 "expected dictionary, got: %s" (type conf))
+      (let [src (try (slurp conf-file)
+                  ([e] (e/emf (merge b {:e-via-try e})
+                              "failed to slurp: %s" conf-file)))
+            cnf (try (parse src)
+                  ([e] (e/emf (merge b {:e-via-try e})
+                              "failed to parse: %s" conf-file)))]
+        (when (not cnf)
+          (e/emf b "failed to load: %s" conf-file))
         #
-        [(array ;(get conf :includes @[]))
-         (array ;(get conf :excludes @[]))])
+        (when (not (dictionary? cnf))
+          (e/emf b "expected dictionary in conf, got: %s" (type cnf)))
+        #
+        [(array ;(get cnf :includes @[]))
+         (array ;(get cnf :excludes @[]))])
       #
-      (errorf "unexpected result parsing: %n" args)))
+      (e/emf b "unexpected result parsing args: %n" args)))
   # XXX: struct has precedence over env var...is that desirable?
   (when (and (not (false? (get opts :no-color)))
              (os/getenv "NO_COLOR"))

@@ -1,3 +1,4 @@
+(import ./errors :prefix "")
 (import ./jipper :prefix "")
 (import ./log :prefix "")
 (import ./verify :prefix "")
@@ -361,6 +362,7 @@
 
 (defn r/find-exprs
   [ti-zloc]
+  (def b {:in "find-exprs" :args {:ti-zloc ti-zloc}})
   # look for a test expression
   (def test-expr-zloc (r/find-test-expr ti-zloc))
   (case test-expr-zloc
@@ -368,8 +370,8 @@
     (break [nil nil])
     #
     :unexpected-result
-    (errorf "unexpected result from `find-test-expr`: %p"
-            test-expr-zloc))
+    (e/emf b "unexpected result from `find-test-expr`: %p"
+           test-expr-zloc))
   # look for an expected value expression
   (def expected-expr-zloc (r/find-expected-expr ti-zloc))
   (case expected-expr-zloc
@@ -377,8 +379,8 @@
     (break [test-expr-zloc nil])
     #
     :unexpected-result
-    (errorf "unexpected result from `find-expected-expr`: %p"
-            expected-expr-zloc))
+    (e/emf b "unexpected result from `find-expected-expr`: %p"
+           expected-expr-zloc))
   #
   [test-expr-zloc expected-expr-zloc])
 
@@ -796,6 +798,7 @@
 
 (defn r/patch-zloc
   [a-zloc update-info]
+  (def b {:in "patch-zloc" :args {:a-zloc a-zloc :update-info update-info}})
   (var zloc a-zloc)
   (var ok? true)
   (each [line value] update-info
@@ -809,23 +812,19 @@
                         (and (= :comment n-type)
                              (= bl line)))))
     (when (not ti-zloc)
-      (l/elogf "failed to find test indicator at line: %d" line)
-      (set ok? false)
-      (break))
+      (e/emf b "failed to find test indicator at line: %d" line))
     #
     (def ee-zloc (r/find-expected-expr ti-zloc))
     (def new-node
       (try (-> (j/par value)
                j/zip-down
                j/node)
-        ([e] (l/elogf e)
-             (l/elogf "failed to create node for value: %n" value))))
+        ([e] (e/emf (merge b {:e-via-try e})
+                    "failed to create node for value: %n" value))))
     # patch with value
     (def new-zloc (j/replace ee-zloc new-node))
     (when (not new-zloc)
-      (l/elogf "failed to replace with new node: %n" new-node)
-      (set ok? false)
-      (break))
+      (e/emf b "failed to replace with new node: %n" new-node))
     #
     (set zloc new-zloc))
   #
@@ -862,6 +861,8 @@
 
 (defn r/patch
   [input update-info &opt output]
+  (def b {:in "patch" :args {:input input :update-info update-info
+                             :output output}})
   (default output (if (string? input) input @""))
   (def src (cond (string? input)
                  (slurp input)
@@ -869,26 +870,26 @@
                  (buffer? input)
                  input
                  #
-                 (errorf "unexpected type for input: %n" input)))
+                 (e/emf b "unexpected type for input: %n" input)))
   (when (empty? src)
-    (l/elogf "no content for input: %n" input)
-    (break nil))
+    (e/emf b "no content for input: %n" input))
   # prepare and patch
   (def zloc
     (try (-> src j/par j/zip-down)
-      ([e] (eprint e)
-           (errorf "failed to create zipper for: %n" input))))
+      ([e] (e/emf (merge b {:e-via-try e})
+                  "failed to create zipper for: %n" input))))
   (def new-zloc (r/patch-zloc zloc update-info))
   (when (not new-zloc)
     (break nil))
   #
   (def new-src
-    (try (-> new-zloc j/root j/gen)
-      ([e] (eprint e)
-           (errorf "failed to create new src for: %n" ))))
+    (try
+      (-> new-zloc j/root j/gen)
+      ([e]
+        (e/emf (merge b {:e-via-try e})
+               "failed to create src from: %n" (j/node new-zloc)))))
   (when (not new-src)
-    (l/elogf "unexpected falsy value for new-src")
-    (break nil))
+    (e/emf b "unexpected falsy value for new-src"))
   #
   (cond (buffer? output)
         (buffer/blit output new-src)
@@ -896,7 +897,7 @@
         (string? output)
         (spit output new-src)
         #
-        (errorf "unexpected value for output: %n" output))
+        (e/emf b "unexpected value for output: %n" output))
   #
   output)
 

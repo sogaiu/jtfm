@@ -1,8 +1,35 @@
 #! /usr/bin/env janet
 
 (comment import ./args :prefix "")
+(comment import ./errors :prefix "")
+(defn e/makef
+  [base fmt & args]
+  (merge base {:msg (string/format fmt ;args)}))
+
+(defn e/emf
+  [base fmt & args]
+  (error (e/makef base fmt ;args)))
+
+(defn e/show
+  [err]
+  (eprintf "%s: %s" (get err :in) (get err :msg))
+  (when-let [args (get err :args)]
+    (eprint "  args:")
+    (eachp [n v] args
+      (eprintf "    %s: %n" n v)))
+  (when-let [locals (get err :locals)]
+    (eprint "  locals:")
+    (eachp [n v] locals
+      (eprintf "    %s: %n" n v)))
+  (when-let [e (get err :e-via-try)]
+    (eprintf "  e via try: %n" e)))
+
+
+
 (defn a/parse-args
   [args]
+  (def b {:in "parse-args" :args {:args args}})
+  #
   (def the-args (array ;args))
   #
   (def head (get the-args 0))
@@ -28,10 +55,11 @@
         @{}
         (let [parsed
               (try (parse (string "@" head))
-                ([e] (eprint e)
-                     (errorf "failed to parse options: %n" head)))]
-          (assertf (and parsed (table? parsed))
-                   "expected table but found: %s" (type parsed))
+                ([e] (e/emf (merge b {:e-via-try e})
+                            "failed to parse options: %n" head)))]
+          (when (not (and parsed (table? parsed)))
+            (e/emf b "expected table but found: %s" (type parsed)))
+          #
           (array/remove the-args 0)
           parsed))
       @{}))
@@ -43,16 +71,22 @@
       [the-args @[]]
       # conf file
       (= :file (os/stat conf-file :mode))
-      (let [conf (try (parse (slurp conf-file))
-                   ([e] (error e)))]
-        (assertf conf "failed to parse: %s" conf-file)
-        (assertf (dictionary? conf)
-                 "expected dictionary, got: %s" (type conf))
+      (let [src (try (slurp conf-file)
+                  ([e] (e/emf (merge b {:e-via-try e})
+                              "failed to slurp: %s" conf-file)))
+            cnf (try (parse src)
+                  ([e] (e/emf (merge b {:e-via-try e})
+                              "failed to parse: %s" conf-file)))]
+        (when (not cnf)
+          (e/emf b "failed to load: %s" conf-file))
         #
-        [(array ;(get conf :includes @[]))
-         (array ;(get conf :excludes @[]))])
+        (when (not (dictionary? cnf))
+          (e/emf b "expected dictionary in conf, got: %s" (type cnf)))
+        #
+        [(array ;(get cnf :includes @[]))
+         (array ;(get cnf :excludes @[]))])
       #
-      (errorf "unexpected result parsing: %n" args)))
+      (e/emf b "unexpected result parsing args: %n" args)))
   # XXX: struct has precedence over env var...is that desirable?
   (when (and (not (false? (get opts :no-color)))
              (os/getenv "NO_COLOR"))
@@ -99,6 +133,8 @@
   )
 
 
+(comment import ./errors :prefix "")
+
 (comment import ./log :prefix "")
 (defn l/log
   [& args]
@@ -130,6 +166,8 @@
 
 
 (comment import ./rewrite :prefix "")
+(comment import ./errors :prefix "")
+
 (comment import ./jipper :prefix "")
 # bl - begin line
 # bc - begin column
@@ -2726,6 +2764,7 @@
 
 (defn r/find-exprs
   [ti-zloc]
+  (def b {:in "find-exprs" :args {:ti-zloc ti-zloc}})
   # look for a test expression
   (def test-expr-zloc (r/find-test-expr ti-zloc))
   (case test-expr-zloc
@@ -2733,8 +2772,8 @@
     (break [nil nil])
     #
     :unexpected-result
-    (errorf "unexpected result from `find-test-expr`: %p"
-            test-expr-zloc))
+    (e/emf b "unexpected result from `find-test-expr`: %p"
+           test-expr-zloc))
   # look for an expected value expression
   (def expected-expr-zloc (r/find-expected-expr ti-zloc))
   (case expected-expr-zloc
@@ -2742,8 +2781,8 @@
     (break [test-expr-zloc nil])
     #
     :unexpected-result
-    (errorf "unexpected result from `find-expected-expr`: %p"
-            expected-expr-zloc))
+    (e/emf b "unexpected result from `find-expected-expr`: %p"
+           expected-expr-zloc))
   #
   [test-expr-zloc expected-expr-zloc])
 
@@ -3161,6 +3200,7 @@
 
 (defn r/patch-zloc
   [a-zloc update-info]
+  (def b {:in "patch-zloc" :args {:a-zloc a-zloc :update-info update-info}})
   (var zloc a-zloc)
   (var ok? true)
   (each [line value] update-info
@@ -3174,23 +3214,19 @@
                         (and (= :comment n-type)
                              (= bl line)))))
     (when (not ti-zloc)
-      (l/elogf "failed to find test indicator at line: %d" line)
-      (set ok? false)
-      (break))
+      (e/emf b "failed to find test indicator at line: %d" line))
     #
     (def ee-zloc (r/find-expected-expr ti-zloc))
     (def new-node
       (try (-> (j/par value)
                j/zip-down
                j/node)
-        ([e] (l/elogf e)
-             (l/elogf "failed to create node for value: %n" value))))
+        ([e] (e/emf (merge b {:e-via-try e})
+                    "failed to create node for value: %n" value))))
     # patch with value
     (def new-zloc (j/replace ee-zloc new-node))
     (when (not new-zloc)
-      (l/elogf "failed to replace with new node: %n" new-node)
-      (set ok? false)
-      (break))
+      (e/emf b "failed to replace with new node: %n" new-node))
     #
     (set zloc new-zloc))
   #
@@ -3227,6 +3263,8 @@
 
 (defn r/patch
   [input update-info &opt output]
+  (def b {:in "patch" :args {:input input :update-info update-info
+                             :output output}})
   (default output (if (string? input) input @""))
   (def src (cond (string? input)
                  (slurp input)
@@ -3234,26 +3272,26 @@
                  (buffer? input)
                  input
                  #
-                 (errorf "unexpected type for input: %n" input)))
+                 (e/emf b "unexpected type for input: %n" input)))
   (when (empty? src)
-    (l/elogf "no content for input: %n" input)
-    (break nil))
+    (e/emf b "no content for input: %n" input))
   # prepare and patch
   (def zloc
     (try (-> src j/par j/zip-down)
-      ([e] (eprint e)
-           (errorf "failed to create zipper for: %n" input))))
+      ([e] (e/emf (merge b {:e-via-try e})
+                  "failed to create zipper for: %n" input))))
   (def new-zloc (r/patch-zloc zloc update-info))
   (when (not new-zloc)
     (break nil))
   #
   (def new-src
-    (try (-> new-zloc j/root j/gen)
-      ([e] (eprint e)
-           (errorf "failed to create new src for: %n" ))))
+    (try
+      (-> new-zloc j/root j/gen)
+      ([e]
+        (e/emf (merge b {:e-via-try e})
+               "failed to create src from: %n" (j/node new-zloc)))))
   (when (not new-src)
-    (l/elogf "unexpected falsy value for new-src")
-    (break nil))
+    (e/emf b "unexpected falsy value for new-src"))
   #
   (cond (buffer? output)
         (buffer/blit output new-src)
@@ -3261,7 +3299,7 @@
         (string? output)
         (spit output new-src)
         #
-        (errorf "unexpected value for output: %n" output))
+        (e/emf b "unexpected value for output: %n" output))
   #
   output)
 
@@ -3374,7 +3412,7 @@
 
 
 (comment import ./tests :prefix "")
-(comment import ./log :prefix "")
+(comment import ./errors :prefix "")
 
 (comment import ./rewrite :prefix "")
 
@@ -3420,35 +3458,38 @@
 (def t/test-file-ext ".jtfm")
 
 (defn t/make-tests
-  [filepath &opt opts]
-  (def src (slurp filepath))
+  [in-path &opt opts]
+  (def b {:in "make-tests" :args {:in-path in-path :opts opts}})
+  #
+  (def src (slurp in-path))
   (def test-src (r/rewrite-as-test-file src))
   (when (not test-src)
     (break :no-tests))
   #
-  (def [fdir fname] (u/parse-path filepath))
-  (def test-filepath (string fdir "_" fname t/test-file-ext))
+  (def [fdir fname] (u/parse-path in-path))
+  (def test-path (string fdir "_" fname t/test-file-ext))
   (when (and (not (get opts :overwrite))
-             (os/stat test-filepath :mode))
-    (l/elogf "test file already exists for: %s" filepath)
+             (os/stat test-path :mode))
+    (e/emf (merge b {:locals {:test-path test-path}})
+           "test file already exists for: %s" in-path)
     (break nil))
   #
-  (spit test-filepath test-src)
+  (spit test-path test-src)
   #
-  test-filepath)
+  test-path)
 
 (defn t/run-tests
-  [test-filepath]
+  [test-path]
+  (def b {:in "run-tests" :args {:test-path test-path}})
+  #
   (try
     (with [of (file/temp)]
       (with [ef (file/temp)]
         (let [# prevents any contained `main` functions from executing
               cmd
-              ["janet" "-e" (string "(dofile `" test-filepath "`)")]
+              ["janet" "-e" (string "(dofile `" test-path "`)")]
               ecode
               (os/execute cmd :p {:out of :err ef})]
-          (when (not (zero? ecode))
-            (l/elogf "non-zero exit code: %d" ecode))
           #
           (file/flush of)
           (file/flush ef)
@@ -3459,15 +3500,18 @@
            (file/read of :all)
            (file/read ef :all)])))
     ([e]
-      (l/elogf "problem executing tests: %p" e)
-      [nil nil nil])))
+      (e/emf (merge b {:e-via-try e})
+             "problem running tests in: %s" test-path))))
 
 (defn t/parse-output
   [out]
+  (def b {:in "parse-output" :args {:out out}})
   # see verify.janet
   (def boundary (buffer/new-filled 72 (chr "#")))
   (def b-idx (last (string/find-all boundary out)))
-  (assertf b-idx "failed to find boundary in output: %n" out)
+  (when (not b-idx)
+    (e/emf b "failed to find boundary in output: %n" out))
+  #
   (def [test-out results] (string/split boundary out b-idx))
   #
   [(parse results) test-out])
@@ -3645,7 +3689,7 @@
 
 ###########################################################################
 
-(def version "2026-01-03_13-56-23")
+(def version "2026-01-05_12-17-07")
 
 (def usage
   ``
@@ -3708,23 +3752,24 @@
 
 (defn make-and-run
   [input &opt opts]
+  (def b @{:in "make-and-run" :args {:input input :opts opts}})
+  #
   (default opts @{})
   # create test source
   (def result (t/make-tests input opts))
   (when (not result)
-    (l/elogf "failed to create test file for: %n" input)
-    (break [nil nil nil nil]))
+    (e/emf b "failed to create test file for: %n" input))
   #
   (when (= :no-tests result)
     (break [:no-tests nil nil nil]))
   #
-  (def test-filepath result)
+  (def test-path result)
   # run tests and collect output
-  (def [ecode out err] (t/run-tests test-filepath))
+  (def [ecode out err] (t/run-tests test-path))
   #
   (when (empty? out)
-    (l/elogf "expected non-empty output")
-    (l/elogf "possible problem in verify.janet"))
+    (e/emf (merge b {:locals {:ecode ecode :out out :err err}})
+           "out should be non-empty - review verify.janet"))
   #
   (def [test-results test-out] (t/parse-output out))
   (def fails (get test-results :fails))
@@ -3739,23 +3784,21 @@
       (set expected-unreadable? f)
       (break)))
   #
-  (def fmt-str (if (get opts :no-color) "%m" "%M"))
+  (def fmt-str
+    (string/format "unreadable value in:\n%s"
+                   (if (get opts :no-color) "%m" "%M")))
   (when test-unreadable?
-    (l/elogf "unreadable value in test-value")
-    (l/elogf fmt-str test-unreadable?)
-    (break [nil nil nil nil]))
+    (e/emf b fmt-str test-unreadable?))
   #
   (when expected-unreadable?
-    (l/elogf "unreadable value in expected-value")
-    (l/elogf fmt-str expected-unreadable?)
-    (break [nil nil nil nil]))
+    (e/emf b fmt-str expected-unreadable?))
   #
-  [ecode test-filepath test-results test-out err])
+  [ecode test-path test-results test-out err])
 
 (defn make-run-report
   [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results test-out test-err]
+  (def [ecode test-path test-results test-out test-err]
     (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
@@ -3766,18 +3809,19 @@
   (report test-results test-out test-err)
   # finish off
   (when (zero? ecode)
-    (os/rm test-filepath)
+    (os/rm test-path)
     true))
 
 (defn make-run-update
   [input &opt opts]
+  (def b @{:in "make-run-update" :args {:input input :opts opts}})
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results _ _] (make-and-run input opts))
+  (def [ecode test-path test-results _ _] (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   # successful run means no tests to update
   (when (zero? ecode)
-    (os/rm test-filepath)
+    (os/rm test-path)
     (break true))
   #
   (def fails (get test-results :fails))
@@ -3790,10 +3834,10 @@
       [line-no tv-str]))
   (def ret (r/patch input update-info))
   (when (not ret)
-    (l/elogf "failed to patch: %n" input)
-    (break nil))
+    (e/emf (merge b {:locals {:fails fails :update-info update-info}})
+           "failed to patch: %n" input))
   #
-  (os/rm test-filepath)
+  (os/rm test-path)
   #
   (if (get opts :update-first)
     :stop
@@ -3803,6 +3847,8 @@
 
 (defn main
   [& args]
+  (def b @{:in "main" :args {:args args}})
+  #
   (def opts (a/parse-args (drop 1 args)))
   #
   (when (get opts :show-help)
@@ -3818,44 +3864,50 @@
   (def includes (get opts :includes))
   (def excludes (get opts :excludes))
   #
-  (def src-filepaths
+  (def src-paths
     (s/collect-paths includes |(or (string/has-suffix? ".janet" $)
                                    (s/has-janet-shebang? $))))
+  #
+  (put b :locals @{:opts opts :update? update?
+                   :includes includes :excludes excludes
+                   :src-paths src-paths})
   # generate tests, run tests, and update / report
-  (each path src-filepaths
+  (each path src-paths
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
-      (l/logf path)
-      (def result
-        (if update?
-          (make-run-update path opts)
-          (make-run-report path opts)))
-      (cond
-        (= :stop result)
+      (put-in b [:locals :path] path)
+      (try
         (do
-          (l/logf "Test updated in: %s" path)
-          (os/exit 0))
-        #
-        (= :continue result)
-        (l/logf "Test(s) updated in: %s" path)
-        #
-        (= :no-tests result)
-        # XXX: the 2 newlines here are cosmetic
-        (l/elogf "* no tests detected for: %s\n\n" path)
-        #
-        (nil? result)
-        (do
-          (l/elogf "failure in: %s" path)
-          (os/exit 1))
-        #
-        (true? result)
-        true
-        #
-        (do
-          (l/elogf "Unexpected result %p for: %s" result path)
+          (l/logf path)
+          (def result (if update?
+                        (make-run-update path opts)
+                        (make-run-report path opts)))
+          (put-in b [:locals :result] result)
+          (cond
+            (= :stop result)
+            (do
+              (l/logf "Test updated in: %s" path)
+              (os/exit 0))
+            #
+            (= :continue result)
+            (l/logf "Test(s) updated in: %s" path)
+            #
+            (= :no-tests result)
+            # XXX: the 2 newlines here are cosmetic
+            (l/elogf "* no tests detected for: %s\n\n" path)
+            #
+            (nil? result)
+            (e/emf b "failure in: %s" path)
+            #
+            (true? result)
+            true
+            #
+            (e/emf b "unexpected result %p for: %s" result path)))
+        ([e]
+          (e/show e)
           (os/exit 1)))))
   #
   (when (not update?)
     (l/logf "All tests completed successfully in %d file(s)."
-            (length src-filepaths))))
+            (length src-paths))))
 
