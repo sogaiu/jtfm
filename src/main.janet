@@ -80,9 +80,9 @@
   (when (= :no-tests result)
     (break [:no-tests nil nil nil]))
   #
-  (def test-filepath result)
+  (def test-path result)
   # run tests and collect output
-  (def [ecode out err] (t/run-tests test-filepath))
+  (def [ecode out err] (t/run-tests test-path))
   #
   (when (empty? out)
     (l/elogf "expected non-empty output")
@@ -112,12 +112,12 @@
     (l/elogf fmt-str expected-unreadable?)
     (break [nil nil nil nil]))
   #
-  [ecode test-filepath test-results test-out err])
+  [ecode test-path test-results test-out err])
 
 (defn make-run-report
   [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results test-out test-err]
+  (def [ecode test-path test-results test-out test-err]
     (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
@@ -128,18 +128,18 @@
   (report test-results test-out test-err)
   # finish off
   (when (zero? ecode)
-    (os/rm test-filepath)
+    (os/rm test-path)
     true))
 
 (defn make-run-update
   [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-filepath test-results _ _] (make-and-run input opts))
+  (def [ecode test-path test-results _ _] (make-and-run input opts))
   (when (or (nil? ecode) (= :no-tests ecode))
     (break ecode))
   # successful run means no tests to update
   (when (zero? ecode)
-    (os/rm test-filepath)
+    (os/rm test-path)
     (break true))
   #
   (def fails (get test-results :fails))
@@ -155,7 +155,7 @@
     (l/elogf "failed to patch: %n" input)
     (break nil))
   #
-  (os/rm test-filepath)
+  (os/rm test-path)
   #
   (if (get opts :update-first)
     :stop

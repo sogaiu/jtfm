@@ -5,31 +5,31 @@
 (def test-file-ext ".jtfm")
 
 (defn make-tests
-  [filepath &opt opts]
-  (def src (slurp filepath))
+  [in-path &opt opts]
+  (def src (slurp in-path))
   (def test-src (r/rewrite-as-test-file src))
   (when (not test-src)
     (break :no-tests))
   #
-  (def [fdir fname] (u/parse-path filepath))
-  (def test-filepath (string fdir "_" fname test-file-ext))
+  (def [fdir fname] (u/parse-path in-path))
+  (def test-path (string fdir "_" fname test-file-ext))
   (when (and (not (get opts :overwrite))
-             (os/stat test-filepath :mode))
-    (l/elogf "test file already exists for: %s" filepath)
+             (os/stat test-path :mode))
+    (l/elogf "test file already exists for: %s" in-path)
     (break nil))
   #
-  (spit test-filepath test-src)
+  (spit test-path test-src)
   #
-  test-filepath)
+  test-path)
 
 (defn run-tests
-  [test-filepath]
+  [test-path]
   (try
     (with [of (file/temp)]
       (with [ef (file/temp)]
         (let [# prevents any contained `main` functions from executing
               cmd
-              ["janet" "-e" (string "(dofile `" test-filepath "`)")]
+              ["janet" "-e" (string "(dofile `" test-path "`)")]
               ecode
               (os/execute cmd :p {:out of :err ef})]
           (when (not (zero? ecode))
