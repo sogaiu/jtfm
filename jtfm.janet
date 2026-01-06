@@ -3732,7 +3732,7 @@
       (def [desc data] single-result)
       (case desc
         :no-tests
-        (l/noten :i " - no tests detected")
+        (l/noten :i " - no tests found")
         #
         :no-fails
         (do
@@ -3802,7 +3802,7 @@
       (def [desc data] single-result)
       (case desc
         :no-tests
-        (l/noten :i "no tests detected")
+        (l/noten :i "no tests found")
         #
         :no-updates
         (l/noten :i "no tests needed updating")
@@ -3912,7 +3912,7 @@
 
 ###########################################################################
 
-(def version "2026-01-06_14-50-45")
+(def version "2026-01-06_16-19-10")
 
 (def usage
   ``

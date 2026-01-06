@@ -83,7 +83,7 @@
       (def [desc data] single-result)
       (case desc
         :no-tests
-        (l/noten :i " - no tests detected")
+        (l/noten :i " - no tests found")
         #
         :no-fails
         (do
@@ -153,7 +153,7 @@
       (def [desc data] single-result)
       (case desc
         :no-tests
-        (l/noten :i "no tests detected")
+        (l/noten :i "no tests found")
         #
         :no-updates
         (l/noten :i "no tests needed updating")
