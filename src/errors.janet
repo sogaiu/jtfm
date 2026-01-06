@@ -8,6 +8,8 @@
 
 (defn show
   [err]
+  (assertf (dictionary? err) "expected dictionary but got: %n" err)
+  #
   (eprintf "%s: %s" (get err :in) (get err :msg))
   (when-let [args (get err :args)]
     (eprint "  args:")

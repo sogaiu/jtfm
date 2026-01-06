@@ -11,7 +11,7 @@
   (def src (slurp in-path))
   (def test-src (r/rewrite-as-test-file src))
   (when (not test-src)
-    (break :no-tests))
+    (break nil))
   #
   (def [fdir fname] (u/parse-path in-path))
   (def test-path (string fdir "_" fname test-file-ext))
@@ -41,7 +41,7 @@
           (file/flush ef)
           (file/seek of :set 0)
           (file/seek ef :set 0)
-          #
+          # XXX: iiuc ecode cannot be nil
           [ecode
            (file/read of :all)
            (file/read ef :all)])))

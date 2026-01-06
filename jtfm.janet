@@ -12,6 +12,8 @@
 
 (defn e/show
   [err]
+  (assertf (dictionary? err) "expected dictionary but got: %n" err)
+  #
   (eprintf "%s: %s" (get err :in) (get err :msg))
   (when-let [args (get err :args)]
     (eprint "  args:")
@@ -133,6 +135,7 @@
   )
 
 
+(comment import ./commands :prefix "")
 (comment import ./errors :prefix "")
 
 (comment import ./log :prefix "")
@@ -163,6 +166,138 @@
 (defn l/elof
   [& args]
   (eprinf ;args))
+
+
+(comment import ./output :prefix "")
+(comment import ./log :prefix "")
+
+
+(def o/color-table
+  {:black 30
+   :blue 34
+   :cyan 36
+   :green 32
+   :magenta 35
+   :red 31
+   :white 37
+   :yellow 33})
+
+(defn o/print-color
+  [msg color]
+  (def color-num (get o/color-table color))
+  (assertf color-num "unknown color: %n" color)
+  (def real-msg
+    (if (os/getenv "NO_COLOR")
+      msg
+      (string "\e[" color-num "m" msg "\e[0m")))
+  (l/lof real-msg))
+
+(comment
+
+  (def [ok? result] (protect (o/print-color "hey" :chartreuse)))
+  # =>
+  [false "unknown color: :chartreuse"]
+
+  )
+
+(defn o/dashes
+  [&opt n]
+  (default n 60)
+  (string/repeat "-" n))
+
+(defn o/print-dashes
+  [&opt n]
+  (l/log (o/dashes n)))
+
+(defn o/print-form
+  [form &opt color]
+  (def buf @"")
+  (with-dyns [:out buf]
+    (printf "%m" form))
+  (def msg (string/trimr buf))
+  (l/log ":")
+  (if color
+    (o/print-color msg color)
+    (l/lof msg))
+  (l/log))
+
+(defn o/legacy-report
+  [{:num-tests total-tests :fails fails}]
+  (def total-passed (- total-tests (length fails)))
+  (var i 0)
+  (each f fails
+    (def {:test-value test-value
+          :expected-value expected-value
+          :name test-name
+          :line-no line-no
+          :passed test-passed
+          :test-form test-form} f)
+    (++ i)
+    (l/log)
+    (l/lof "--(")
+    (o/print-color i :cyan)
+    (l/log ")--")
+    (l/log)
+    #
+    (o/print-color "failed:" :yellow)
+    (l/log)
+    (o/print-color (string/format "line-%d" line-no) :red)
+    (l/log)
+    #
+    (l/log)
+    (o/print-color "form" :yellow)
+    (o/print-form test-form)
+    #
+    (l/log)
+    (o/print-color "expected" :yellow)
+    (o/print-form expected-value)
+    #
+    (l/log)
+    (o/print-color "actual" :yellow)
+    (o/print-form test-value :blue))
+  (when (zero? (length fails))
+    (l/log)
+    (l/log "No tests failed."))
+  # summarize totals
+  (l/log)
+  (o/print-dashes)
+  (when (= 0 total-tests)
+    (l/log "No tests found, so no judgements made.")
+    (break true))
+  (if (not= total-passed total-tests)
+    (o/print-color total-passed :red)
+    (o/print-color total-passed :green))
+  (l/lof " of ")
+  (o/print-color total-tests :green)
+  (l/log " passed")
+  (o/print-dashes)
+  # extra newlines from original report function handling out
+  (l/log)
+  (l/log))
+
+(defn o/report-std
+  [content title]
+  (when (and content (pos? (length content)))
+    (def separator (string/repeat "-" (length title)))
+    (l/log separator)
+    (l/log title)
+    (l/log separator)
+    (l/log content)))
+
+(defn o/report
+  [test-results out err]
+  (o/legacy-report test-results)
+  (when (and out (pos? (length out)))
+    (o/report-std out "stdout")
+    (l/log))
+  (when (and err (pos? (length err)))
+    (o/report-std err "stderr")
+    (l/log))
+  (when (and (zero? (get test-results :num-tests))
+             (empty? out)
+             (empty? err))
+    (l/log "no test output...possibly no tests")
+    (l/log)))
 
 
 (comment import ./rewrite :prefix "")
@@ -3331,6 +3466,322 @@
   )
 
 
+(comment import ./tests :prefix "")
+(comment import ./errors :prefix "")
+
+(comment import ./rewrite :prefix "")
+
+(comment import ./utils :prefix "")
+(defn u/parse-path
+  [path]
+  (def revcap-peg
+    ~(sequence (capture (sequence (choice (to (choice "/" `\`))
+                                          (thru -1))))
+               (capture (thru -1))))
+  (when-let [[rev-name rev-dir]
+             (-?>> (string/reverse path)
+                   (peg/match revcap-peg)
+                   (map string/reverse))]
+    [(or rev-dir "") rev-name]))
+
+(comment
+
+  (u/parse-path "/tmp/fun/my.fnl")
+  # =>
+  ["/tmp/fun/" "my.fnl"]
+
+  (u/parse-path "/my.janet")
+  # =>
+  ["/" "my.janet"]
+
+  (u/parse-path "pp.el")
+  # =>
+  ["" "pp.el"]
+
+  (u/parse-path "/")
+  # =>
+  ["/" ""]
+
+  (u/parse-path "")
+  # =>
+  ["" ""]
+
+  )
+
+
+
+(def t/test-file-ext ".jtfm")
+
+(defn t/make-tests
+  [in-path &opt opts]
+  (def b {:in "make-tests" :args {:in-path in-path :opts opts}})
+  #
+  (def src (slurp in-path))
+  (def test-src (r/rewrite-as-test-file src))
+  (when (not test-src)
+    (break nil))
+  #
+  (def [fdir fname] (u/parse-path in-path))
+  (def test-path (string fdir "_" fname t/test-file-ext))
+  (when (and (not (get opts :overwrite))
+             (os/stat test-path :mode))
+    (e/emf (merge b {:locals {:test-path test-path}})
+           "test file already exists for: %s" in-path))
+  #
+  (spit test-path test-src)
+  #
+  test-path)
+
+(defn t/run-tests
+  [test-path]
+  (def b {:in "run-tests" :args {:test-path test-path}})
+  #
+  (try
+    (with [of (file/temp)]
+      (with [ef (file/temp)]
+        (let [# prevents any contained `main` functions from executing
+              cmd
+              ["janet" "-e" (string "(dofile `" test-path "`)")]
+              ecode
+              (os/execute cmd :p {:out of :err ef})]
+          #
+          (file/flush of)
+          (file/flush ef)
+          (file/seek of :set 0)
+          (file/seek ef :set 0)
+          # XXX: iiuc ecode cannot be nil
+          [ecode
+           (file/read of :all)
+           (file/read ef :all)])))
+    ([e]
+      (e/emf (merge b {:e-via-try e})
+             "problem running tests in: %s" test-path))))
+
+(defn t/parse-output
+  [out]
+  (def b {:in "parse-output" :args {:out out}})
+  # see verify.janet
+  (def boundary (buffer/new-filled 72 (chr "#")))
+  (def b-idx (last (string/find-all boundary out)))
+  (when (not b-idx)
+    (e/emf b "failed to find boundary in output: %n" out))
+  #
+  (def [test-out results] (string/split boundary out b-idx))
+  #
+  [(parse results) test-out])
+
+(comment
+
+  (def data
+    {:test-form '(+ 1 1)
+     :test-status true
+     :test-value 2
+     :expected-form 3
+     :expected-status true
+     :expected-value 3
+     :line-no 4
+     :passed true
+     :name ""})
+
+  (def separator (buffer/new-filled 72 (chr "#")))
+
+  (def out
+    (string
+      "hello this is a line\n"
+      "and so is this\n"
+      separator "\n"
+      (string/format "%j" data)))
+
+  (t/parse-output out)
+  # =>
+  [{:expected-form 3
+    :expected-status true
+    :expected-value 3
+    :line-no 4
+    :name ""
+    :passed true
+    :test-form '(+ 1 1)
+    :test-status true
+    :test-value 2}
+   "hello this is a line\nand so is this\n"]
+
+  )
+
+
+
+(defn c/make-and-run
+  [input &opt opts]
+  (def b @{:in "make-and-run" :args {:input input :opts opts}})
+  #
+  (default opts @{})
+  # create test source
+  (def result (t/make-tests input opts))
+  (when (not result)
+    (break [:no-tests nil nil nil]))
+  #
+  (def test-path result)
+  # run tests and collect output
+  (def [ecode out err] (t/run-tests test-path))
+  #
+  (when (empty? out)
+    (e/emf (merge b {:locals {:ecode ecode :out out :err err}})
+           "out should be non-empty - review verify.janet"))
+  #
+  (def [test-results test-out] (t/parse-output out))
+  (def fails (get test-results :fails))
+  (var test-unreadable? nil)
+  (var expected-unreadable? nil)
+  (each f fails
+    (when (get f :test-unreadable)
+      (set test-unreadable? f)
+      (break))
+      #
+    (when (get f :expected-unreadable)
+      (set expected-unreadable? f)
+      (break)))
+  #
+  (def fmt-str
+    (string/format "unreadable value in:\n%s"
+                   (if (get opts :no-color) "%m" "%M")))
+  (when test-unreadable?
+    (e/emf b fmt-str test-unreadable?))
+  #
+  (when expected-unreadable?
+    (e/emf b fmt-str expected-unreadable?))
+  #
+  [ecode test-path test-results test-out err])
+
+########################################################################
+
+(defn c/mrr-single
+  [input &opt opts]
+  # try to make and run tests, then collect output
+  (def [ecode test-path test-results test-out test-err]
+    (c/make-and-run input opts))
+  (when (= :no-tests ecode)
+    (break :no-tests))
+  #
+  (def {:report report} opts)
+  (default report o/report)
+  # print out results
+  (report test-results test-out test-err)
+  #
+  (when (not= 0 ecode)
+    (break ecode))
+  #
+  (os/rm test-path)
+  true)
+
+(defn c/make-run-report
+  [src-paths opts]
+  (def b @{:in "make-run-report" :args {:src-paths src-paths :opts opts}})
+  #
+  (def excludes (get opts :excludes))
+  (def td-paths @[])
+  # generate tests, run tests, and report
+  (each path src-paths
+    (when (and (not (has-value? excludes path))
+               (= :file (os/stat path :mode)))
+      (l/logf path)
+      (def result (c/mrr-single path opts))
+      (put b :locals @{:result result :path path})
+      (cond
+        (= true result)
+        (array/push td-paths path)
+        #
+        (= :no-tests result)
+        # XXX: the 2 newlines here are cosmetic
+        (l/elogf "* no tests detected for: %s\n\n" path)
+        #
+        (int? result)
+        (e/emf b "exit code %d while testing: %s" result path)
+        #
+        (e/emf b "unexpected result %p for: %s" result path))))
+  #
+  (l/logf "All tests completed successfully in %d file(s)."
+          (length td-paths)))
+
+########################################################################
+
+(defn c/mru-single
+  [input &opt opts]
+  (def b @{:in "make-run-update" :args {:input input :opts opts}})
+  # try to make and run tests, then collect output
+  (def [ecode test-path test-results _ _] (c/make-and-run input opts))
+  (when (= :no-tests ecode)
+    (break :no-tests))
+  # successful run means no tests to update
+  (when (zero? ecode)
+    (os/rm test-path)
+    (break true))
+  #
+  (def fails (get test-results :fails))
+  (def update-info
+    (seq [f :in (if (get opts :update-first)
+                  @[(get fails 0)]
+                  fails)
+          :let [{:line-no line-no :test-value test-value} f
+                tv-str (string/format "%j" test-value)]]
+      [line-no tv-str]))
+  (def ret (r/patch input update-info))
+  (when (not ret)
+    (e/emf (merge b {:locals {:fails fails :update-info update-info}})
+           "failed to patch: %n" input))
+  #
+  (os/rm test-path)
+  #
+  (def lines (map |(get $ 0) update-info))
+  #
+  (if (get opts :update-first)
+    [:stop lines]
+    [:continue lines]))
+
+(defn c/make-run-update
+  [src-paths opts]
+  (def b @{:in "make-run-update" :args {:src-paths src-paths :opts opts}})
+  #
+  (def excludes (get opts :excludes))
+  (def upd-paths @[])
+  # generate tests, run tests, and update
+  (each path src-paths
+    (when (and (not (has-value? excludes path))
+               (= :file (os/stat path :mode)))
+      (def result (c/mru-single path opts))
+      (put b :locals @{:path path :result result})
+      (cond
+        (= true result)
+        true
+        #
+        (= :no-tests result)
+        # XXX: the 2 newlines here are cosmetic
+        (l/elogf "* no tests detected for: %s\n\n" path)
+        #
+        (and (tuple? result) (= 2 (length result)))
+        (let [[action lines] result]
+          (cond
+            (= :continue action)
+            (let [cs-lines (string/join (map |(string $) lines) ", ")]
+              (array/push upd-paths path)
+              (l/logf "Test(s) updated in: %s on lines: %s"
+                      path cs-lines))
+            #
+            (= :stop action)
+            (let [first-line (get lines 0)]
+              (array/push upd-paths path)
+              (l/logf "Test updated in: %s on line: %d" path first-line)
+              (break))
+            #
+            (e/emf b "unknown action: %n" action)))
+        #
+        (e/emf b "unexpected result %p for: %s" result path))))
+  #
+  (l/logf "Test(s) updated in %d file(s)." (length upd-paths)))
+
+
+(comment import ./errors :prefix "")
+
+(comment import ./log :prefix "")
+
 (comment import ./search :prefix "")
 (def s/sep
   (if (= :windows (os/which))
@@ -3411,284 +3862,10 @@
   filepaths)
 
 
-(comment import ./tests :prefix "")
-(comment import ./errors :prefix "")
-
-(comment import ./rewrite :prefix "")
-
-(comment import ./utils :prefix "")
-(defn u/parse-path
-  [path]
-  (def revcap-peg
-    ~(sequence (capture (sequence (choice (to (choice "/" `\`))
-                                          (thru -1))))
-               (capture (thru -1))))
-  (when-let [[rev-name rev-dir]
-             (-?>> (string/reverse path)
-                   (peg/match revcap-peg)
-                   (map string/reverse))]
-    [(or rev-dir "") rev-name]))
-
-(comment
-
-  (u/parse-path "/tmp/fun/my.fnl")
-  # =>
-  ["/tmp/fun/" "my.fnl"]
-
-  (u/parse-path "/my.janet")
-  # =>
-  ["/" "my.janet"]
-
-  (u/parse-path "pp.el")
-  # =>
-  ["" "pp.el"]
-
-  (u/parse-path "/")
-  # =>
-  ["/" ""]
-
-  (u/parse-path "")
-  # =>
-  ["" ""]
-
-  )
-
-
-
-(def t/test-file-ext ".jtfm")
-
-(defn t/make-tests
-  [in-path &opt opts]
-  (def b {:in "make-tests" :args {:in-path in-path :opts opts}})
-  #
-  (def src (slurp in-path))
-  (def test-src (r/rewrite-as-test-file src))
-  (when (not test-src)
-    (break :no-tests))
-  #
-  (def [fdir fname] (u/parse-path in-path))
-  (def test-path (string fdir "_" fname t/test-file-ext))
-  (when (and (not (get opts :overwrite))
-             (os/stat test-path :mode))
-    (e/emf (merge b {:locals {:test-path test-path}})
-           "test file already exists for: %s" in-path))
-  #
-  (spit test-path test-src)
-  #
-  test-path)
-
-(defn t/run-tests
-  [test-path]
-  (def b {:in "run-tests" :args {:test-path test-path}})
-  #
-  (try
-    (with [of (file/temp)]
-      (with [ef (file/temp)]
-        (let [# prevents any contained `main` functions from executing
-              cmd
-              ["janet" "-e" (string "(dofile `" test-path "`)")]
-              ecode
-              (os/execute cmd :p {:out of :err ef})]
-          #
-          (file/flush of)
-          (file/flush ef)
-          (file/seek of :set 0)
-          (file/seek ef :set 0)
-          #
-          [ecode
-           (file/read of :all)
-           (file/read ef :all)])))
-    ([e]
-      (e/emf (merge b {:e-via-try e})
-             "problem running tests in: %s" test-path))))
-
-(defn t/parse-output
-  [out]
-  (def b {:in "parse-output" :args {:out out}})
-  # see verify.janet
-  (def boundary (buffer/new-filled 72 (chr "#")))
-  (def b-idx (last (string/find-all boundary out)))
-  (when (not b-idx)
-    (e/emf b "failed to find boundary in output: %n" out))
-  #
-  (def [test-out results] (string/split boundary out b-idx))
-  #
-  [(parse results) test-out])
-
-(comment
-
-  (def data
-    {:test-form '(+ 1 1)
-     :test-status true
-     :test-value 2
-     :expected-form 3
-     :expected-status true
-     :expected-value 3
-     :line-no 4
-     :passed true
-     :name ""})
-
-  (def separator (buffer/new-filled 72 (chr "#")))
-
-  (def out
-    (string
-      "hello this is a line\n"
-      "and so is this\n"
-      separator "\n"
-      (string/format "%j" data)))
-
-  (t/parse-output out)
-  # =>
-  [{:expected-form 3
-    :expected-status true
-    :expected-value 3
-    :line-no 4
-    :name ""
-    :passed true
-    :test-form '(+ 1 1)
-    :test-status true
-    :test-value 2}
-   "hello this is a line\nand so is this\n"]
-
-  )
-
-
-(comment import ./output :prefix "")
-(comment import ./log :prefix "")
-
-
-(def o/color-table
-  {:black 30
-   :blue 34
-   :cyan 36
-   :green 32
-   :magenta 35
-   :red 31
-   :white 37
-   :yellow 33})
-
-(defn o/print-color
-  [msg color]
-  (def color-num (get o/color-table color))
-  (assertf color-num "unknown color: %n" color)
-  (def real-msg
-    (if (os/getenv "NO_COLOR")
-      msg
-      (string "\e[" color-num "m" msg "\e[0m")))
-  (l/lof real-msg))
-
-(comment
-
-  (def [ok? result] (protect (o/print-color "hey" :chartreuse)))
-  # =>
-  [false "unknown color: :chartreuse"]
-
-  )
-
-(defn o/dashes
-  [&opt n]
-  (default n 60)
-  (string/repeat "-" n))
-
-(defn o/print-dashes
-  [&opt n]
-  (l/log (o/dashes n)))
-
-(defn o/print-form
-  [form &opt color]
-  (def buf @"")
-  (with-dyns [:out buf]
-    (printf "%m" form))
-  (def msg (string/trimr buf))
-  (l/log ":")
-  (if color
-    (o/print-color msg color)
-    (l/lof msg))
-  (l/log))
-
-(defn o/legacy-report
-  [{:num-tests total-tests :fails fails}]
-  (def total-passed (- total-tests (length fails)))
-  (var i 0)
-  (each f fails
-    (def {:test-value test-value
-          :expected-value expected-value
-          :name test-name
-          :line-no line-no
-          :passed test-passed
-          :test-form test-form} f)
-    (++ i)
-    (l/log)
-    (l/lof "--(")
-    (o/print-color i :cyan)
-    (l/log ")--")
-    (l/log)
-    #
-    (o/print-color "failed:" :yellow)
-    (l/log)
-    (o/print-color (string/format "line-%d" line-no) :red)
-    (l/log)
-    #
-    (l/log)
-    (o/print-color "form" :yellow)
-    (o/print-form test-form)
-    #
-    (l/log)
-    (o/print-color "expected" :yellow)
-    (o/print-form expected-value)
-    #
-    (l/log)
-    (o/print-color "actual" :yellow)
-    (o/print-form test-value :blue))
-  (when (zero? (length fails))
-    (l/log)
-    (l/log "No tests failed."))
-  # summarize totals
-  (l/log)
-  (o/print-dashes)
-  (when (= 0 total-tests)
-    (l/log "No tests found, so no judgements made.")
-    (break true))
-  (if (not= total-passed total-tests)
-    (o/print-color total-passed :red)
-    (o/print-color total-passed :green))
-  (l/lof " of ")
-  (o/print-color total-tests :green)
-  (l/log " passed")
-  (o/print-dashes)
-  # extra newlines from original report function handling out
-  (l/log)
-  (l/log))
-
-(defn o/report-std
-  [content title]
-  (when (and content (pos? (length content)))
-    (def separator (string/repeat "-" (length title)))
-    (l/log separator)
-    (l/log title)
-    (l/log separator)
-    (l/log content)))
-
-(defn o/report
-  [test-results out err]
-  (o/legacy-report test-results)
-  (when (and out (pos? (length out)))
-    (o/report-std out "stdout")
-    (l/log))
-  (when (and err (pos? (length err)))
-    (o/report-std err "stderr")
-    (l/log))
-  (when (and (zero? (get test-results :num-tests))
-             (empty? out)
-             (empty? err))
-    (l/log "no test output...possibly no tests")
-    (l/log)))
-
-
 
 ###########################################################################
 
-(def version "2026-01-06_04-11-48")
+(def version "2026-01-06_06-26-16")
 
 (def usage
   ``
@@ -3749,105 +3926,10 @@
     (jtfm/main)
   ``)
 
-(defn make-and-run
-  [input &opt opts]
-  (def b @{:in "make-and-run" :args {:input input :opts opts}})
-  #
-  (default opts @{})
-  # create test source
-  (def result (t/make-tests input opts))
-  (when (not result)
-    (e/emf b "failed to create test file for: %n" input))
-  #
-  (when (= :no-tests result)
-    (break [:no-tests nil nil nil]))
-  #
-  (def test-path result)
-  # run tests and collect output
-  (def [ecode out err] (t/run-tests test-path))
-  #
-  (when (empty? out)
-    (e/emf (merge b {:locals {:ecode ecode :out out :err err}})
-           "out should be non-empty - review verify.janet"))
-  #
-  (def [test-results test-out] (t/parse-output out))
-  (def fails (get test-results :fails))
-  (var test-unreadable? nil)
-  (var expected-unreadable? nil)
-  (each f fails
-    (when (get f :test-unreadable)
-      (set test-unreadable? f)
-      (break))
-      #
-    (when (get f :expected-unreadable)
-      (set expected-unreadable? f)
-      (break)))
-  #
-  (def fmt-str
-    (string/format "unreadable value in:\n%s"
-                   (if (get opts :no-color) "%m" "%M")))
-  (when test-unreadable?
-    (e/emf b fmt-str test-unreadable?))
-  #
-  (when expected-unreadable?
-    (e/emf b fmt-str expected-unreadable?))
-  #
-  [ecode test-path test-results test-out err])
-
-(defn make-run-report
-  [input &opt opts]
-  # try to make and run tests, then collect output
-  (def [ecode test-path test-results test-out test-err]
-    (make-and-run input opts))
-  (when (or (nil? ecode) (= :no-tests ecode))
-    (break ecode))
-  #
-  (def {:report report} opts)
-  (default report o/report)
-  # print out results
-  (report test-results test-out test-err)
-  # finish off
-  (when (zero? ecode)
-    (os/rm test-path)
-    true))
-
-(defn make-run-update
-  [input &opt opts]
-  (def b @{:in "make-run-update" :args {:input input :opts opts}})
-  # try to make and run tests, then collect output
-  (def [ecode test-path test-results _ _] (make-and-run input opts))
-  (when (or (nil? ecode) (= :no-tests ecode))
-    (break ecode))
-  # successful run means no tests to update
-  (when (zero? ecode)
-    (os/rm test-path)
-    (break true))
-  #
-  (def fails (get test-results :fails))
-  (def update-info
-    (seq [f :in (if (get opts :update-first)
-                  @[(get fails 0)]
-                  fails)
-          :let [{:line-no line-no :test-value test-value} f
-                tv-str (string/format "%j" test-value)]]
-      [line-no tv-str]))
-  (def ret (r/patch input update-info))
-  (when (not ret)
-    (e/emf (merge b {:locals {:fails fails :update-info update-info}})
-           "failed to patch: %n" input))
-  #
-  (os/rm test-path)
-  #
-  (if (get opts :update-first)
-    :stop
-    :continue))
-
 ########################################################################
 
 (defn main
   [& args]
-  (def b @{:in "main" :args {:args args}})
-  #
   (def opts (a/parse-args (drop 1 args)))
   #
   (when (get opts :show-help)
@@ -3858,55 +3940,18 @@
     (l/logf version)
     (os/exit 0))
   #
-  (def update? (or (get opts :update) (get opts :update-first)))
-  #
-  (def includes (get opts :includes))
-  (def excludes (get opts :excludes))
-  #
   (def src-paths
-    (s/collect-paths includes |(or (string/has-suffix? ".janet" $)
-                                   (s/has-janet-shebang? $))))
+    (s/collect-paths (get opts :includes)
+                     |(or (string/has-suffix? ".janet" $)
+                          (s/has-janet-shebang? $))))
   #
-  (put b :locals @{:opts opts :update? update?
-                   :includes includes :excludes excludes
-                   :src-paths src-paths})
-  # generate tests, run tests, and update / report
-  (each path src-paths
-    (when (and (not (has-value? excludes path))
-               (= :file (os/stat path :mode)))
-      (put-in b [:locals :path] path)
-      (try
-        (do
-          (l/logf path)
-          (def result (if update?
-                        (make-run-update path opts)
-                        (make-run-report path opts)))
-          (put-in b [:locals :result] result)
-          (cond
-            (= :stop result)
-            (do
-              (l/logf "Test updated in: %s" path)
-              (os/exit 0))
-            #
-            (= :continue result)
-            (l/logf "Test(s) updated in: %s" path)
-            #
-            (= :no-tests result)
-            # XXX: the 2 newlines here are cosmetic
-            (l/elogf "* no tests detected for: %s\n\n" path)
-            #
-            (nil? result)
-            (e/emf b "failure in: %s" path)
-            #
-            (true? result)
-            true
-            #
-            (e/emf b "unexpected result %p for: %s" result path)))
-        ([e]
-          (e/show e)
-          (os/exit 1)))))
-  #
-  (when (not update?)
-    (l/logf "All tests completed successfully in %d file(s)."
-            (length src-paths))))
+  (try
+    (if (or (get opts :update) (get opts :update-first))
+      (c/make-run-update src-paths opts)
+      (c/make-run-report src-paths opts))
+    ([e f]
+      (if (dictionary? e)
+        (e/show e)
+        (debug/stacktrace f e "internal "))
+      (os/exit 1))))
 
