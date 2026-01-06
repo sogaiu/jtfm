@@ -1,6 +1,5 @@
 (import ./errors :as e)
 (import ./jipper :as j)
-(import ./log :as l)
 (import ./verify :as v)
 
 # at its simplest, a test is expressed like:

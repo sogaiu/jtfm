@@ -1,6 +1,5 @@
 (import ./errors :prefix "")
 (import ./jipper :prefix "")
-(import ./log :prefix "")
 (import ./verify :prefix "")
 
 # at its simplest, a test is expressed like:

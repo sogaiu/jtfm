@@ -2459,8 +2459,6 @@
   )
 
 
-(comment import ./log :prefix "")
-
 (comment import ./verify :prefix "")
 # XXX: try to put in file?  had trouble originally when working on
 #      judge-gen.  may be will have more luck?
@@ -3865,7 +3863,7 @@
 
 ###########################################################################
 
-(def version "2026-01-06_06-26-16")
+(def version "2026-01-06_14-48-27")
 
 (def usage
   ``
