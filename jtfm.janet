@@ -3471,8 +3471,7 @@
   (when (and (not (get opts :overwrite))
              (os/stat test-path :mode))
     (e/emf (merge b {:locals {:test-path test-path}})
-           "test file already exists for: %s" in-path)
-    (break nil))
+           "test file already exists for: %s" in-path))
   #
   (spit test-path test-src)
   #
@@ -3689,7 +3688,7 @@
 
 ###########################################################################
 
-(def version "2026-01-05_12-17-07")
+(def version "2026-01-06_04-11-48")
 
 (def usage
   ``

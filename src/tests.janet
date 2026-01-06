@@ -18,8 +18,7 @@
   (when (and (not (get opts :overwrite))
              (os/stat test-path :mode))
     (e/emf (merge b {:locals {:test-path test-path}})
-           "test file already exists for: %s" in-path)
-    (break nil))
+           "test file already exists for: %s" in-path))
   #
   (spit test-path test-src)
   #
