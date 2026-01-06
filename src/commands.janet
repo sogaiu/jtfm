@@ -54,7 +54,7 @@
   (def [ecode test-path test-results test-out test-err]
     (make-and-run input opts))
   (when (= :no-tests ecode)
-    (break :no-tests))
+    (break [:no-tests nil]))
   #
   (def {:report report} opts)
   (default report o/report)
@@ -62,10 +62,10 @@
   (report test-results test-out test-err)
   #
   (when (not= 0 ecode)
-    (break ecode))
+    (break [:ecode test-results]))
   #
   (os/rm test-path)
-  true)
+  [:no-fails test-results])
 
 (defn make-run-report
   [src-paths opts]
@@ -77,24 +77,31 @@
   (each path src-paths
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
-      (l/logf path)
-      (def result (mrr-single path opts))
-      (put b :locals @{:result result :path path})
-      (cond
-        (= true result)
-        (array/push td-paths path)
+      (l/note :i path)
+      (def single-result (mrr-single path opts))
+      (put b :locals @{:single-result single-result :path path})
+      (def [desc data] single-result)
+      (case desc
+        :no-tests
+        (l/noten :i " - no tests detected")
         #
-        (= :no-tests result)
-        # XXX: the 2 newlines here are cosmetic
-        (l/elogf "* no tests detected for: %s\n\n" path)
+        :no-fails
+        (do
+          (l/note :i " - ")
+          (o/prin-summary (get data :num-tests)
+                          (length (get data :fails)))
+          (array/push td-paths path))
         #
-        (int? result)
-        (e/emf b "exit code %d while testing: %s" result path)
+        :ecode
+        (do
+          (o/prin-summary (get data :num-tests)
+                          (length (get data :fails)))
+          (e/emf b "non-zero exit code while testing: %s" path))
         #
-        (e/emf b "unexpected result %p for: %s" result path))))
+        (e/emf b "unexpected result %p for: %s" desc path))))
   #
-  (l/logf "All tests completed successfully in %d file(s)."
-          (length td-paths)))
+  (l/notenf :i "All tests completed successfully in %d file(s)."
+            (length td-paths)))
 
 ########################################################################
 
@@ -104,11 +111,11 @@
   # try to make and run tests, then collect output
   (def [ecode test-path test-results _ _] (make-and-run input opts))
   (when (= :no-tests ecode)
-    (break :no-tests))
+    (break [:no-tests nil]))
   # successful run means no tests to update
   (when (zero? ecode)
     (os/rm test-path)
-    (break true))
+    (break [:no-updates nil]))
   #
   (def fails (get test-results :fails))
   (def update-info
@@ -128,8 +135,8 @@
   (def lines (map |(get $ 0) update-info))
   #
   (if (get opts :update-first)
-    [:stop lines]
-    [:continue lines]))
+    [:single-update lines]
+    [:multi-update lines]))
 
 (defn make-run-update
   [src-paths opts]
@@ -141,34 +148,30 @@
   (each path src-paths
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
-      (def result (mru-single path opts))
-      (put b :locals @{:path path :result result})
-      (cond
-        (= true result)
-        true
+      (def single-result (mru-single path opts))
+      (put b :locals @{:path path :single-result single-result})
+      (def [desc data] single-result)
+      (case desc
+        :no-tests
+        (l/noten :i "no tests detected")
         #
-        (= :no-tests result)
-        # XXX: the 2 newlines here are cosmetic
-        (l/elogf "* no tests detected for: %s\n\n" path)
+        :no-updates
+        (l/noten :i "no tests needed updating")
         #
-        (and (tuple? result) (= 2 (length result)))
-        (let [[action lines] result]
-          (cond
-            (= :continue action)
-            (let [cs-lines (string/join (map |(string $) lines) ", ")]
-              (array/push upd-paths path)
-              (l/logf "Test(s) updated in: %s on lines: %s"
-                      path cs-lines))
-            #
-            (= :stop action)
-            (let [first-line (get lines 0)]
-              (array/push upd-paths path)
-              (l/logf "Test updated in: %s on line: %d" path first-line)
-              (break))
-            #
-            (e/emf b "unknown action: %n" action)))
+        :multi-update
+        (let [cs-lines (string/join (map |(string $) data) ", ")]
+          (array/push upd-paths path)
+          (l/notenf :i "Test(s) updated in: %s on lines: %s"
+                    path cs-lines))
         #
-        (e/emf b "unexpected result %p for: %s" result path))))
+        :single-update
+        (let [first-line (get data 0)]
+          (array/push upd-paths path)
+          (l/notenf :i "Test updated in: %s on line: %d"
+                    path first-line)
+          (break))
+        #
+        (e/emf b "unexpected result %n for: %s" desc path))))
   #
-  (l/logf "Test(s) updated in %d file(s)." (length upd-paths)))
+  (l/notenf :i "Test(s) updated in %d file(s)." (length upd-paths)))
 

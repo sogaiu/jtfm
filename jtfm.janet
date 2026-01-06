@@ -10,6 +10,7 @@
   [base fmt & args]
   (error (e/makef base fmt ;args)))
 
+# XXX: use l/note?
 (defn e/show
   [err]
   (assertf (dictionary? err) "expected dictionary but got: %n" err)
@@ -139,33 +140,66 @@
 (comment import ./errors :prefix "")
 
 (comment import ./log :prefix "")
-(defn l/log
-  [& args]
-  (print ;args))
+# :w - warn
+# :e - error
+# :i - info
+# :o - output
 
-(defn l/logf
-  [& args]
-  (if (empty? args)
-    (print)
-    (printf ;args)))
+(def l/d-table
+  {:w eprin
+   :e eprin
+   :i eprin
+   :o prin})
 
-(defn l/lof
-  [& args]
-  (prinf ;args))
+(defn l/note
+  [flavor & args]
+  (def disp-table (dyn :d-table l/d-table))
+  (def dispatch-fn (get disp-table flavor))
+  (assertf dispatch-fn "unknown flavor: %n" flavor)
+  #
+  (dispatch-fn ;args))
 
-(defn l/elog
-  [& args]
-  (eprint ;args))
+(def l/df-table
+  {:w eprinf
+   :e eprinf
+   :i eprinf
+   :o prinf})
 
-(defn l/elogf
-  [& args]
-  (if (empty? args)
-    (eprint)
-    (eprintf ;args)))
+(defn l/notef
+  [flavor & args]
+  (def disp-table (dyn :df-table l/df-table))
+  (def dispatch-fn (get disp-table flavor))
+  (assertf dispatch-fn "unknown flavor: %n" flavor)
+  #
+  (dispatch-fn ;args))
 
-(defn l/elof
-  [& args]
-  (eprinf ;args))
+(def l/dn-table
+  {:w eprint
+   :e eprint
+   :i eprint
+   :o print})
+
+(defn l/noten
+  [flavor & args]
+  (def disp-table (dyn :dn-table l/dn-table))
+  (def dispatch-fn (get disp-table flavor))
+  (assertf dispatch-fn "unknown flavor: %n" flavor)
+  #
+  (dispatch-fn ;args))
+
+(def l/dnf-table
+  {:w eprintf
+   :e eprintf
+   :i eprintf
+   :o printf})
+
+(defn l/notenf
+  [flavor & args]
+  (def disp-table (dyn :dnf-table l/dnf-table))
+  (def dispatch-fn (get disp-table flavor))
+  (assertf dispatch-fn "unknown flavor: %n" flavor)
+  #
+  (dispatch-fn ;args))
 
 
 (comment import ./output :prefix "")
@@ -182,7 +216,7 @@
    :white 37
    :yellow 33})
 
-(defn o/print-color
+(defn o/color-msg
   [msg color]
   (def color-num (get o/color-table color))
   (assertf color-num "unknown color: %n" color)
@@ -190,11 +224,16 @@
     (if (os/getenv "NO_COLOR")
       msg
       (string "\e[" color-num "m" msg "\e[0m")))
-  (l/lof real-msg))
+  #
+  real-msg)
+
+(defn o/prin-color
+  [msg color]
+  (l/note :o (o/color-msg msg color)))
 
 (comment
 
-  (def [ok? result] (protect (o/print-color "hey" :chartreuse)))
+  (def [ok? result] (protect (o/prin-color "hey" :chartreuse)))
   # =>
   [false "unknown color: :chartreuse"]
 
@@ -205,99 +244,106 @@
   (default n 60)
   (string/repeat "-" n))
 
-(defn o/print-dashes
+(defn o/prin-dashes
   [&opt n]
-  (l/log (o/dashes n)))
+  (l/note :o (o/dashes n)))
 
-(defn o/print-form
+(defn o/prin-form
   [form &opt color]
   (def buf @"")
   (with-dyns [:out buf]
     (printf "%m" form))
   (def msg (string/trimr buf))
-  (l/log ":")
-  (if color
-    (o/print-color msg color)
-    (l/lof msg))
-  (l/log))
+  (def m-buf
+    (buffer ":\n"
+            (if color (o/color-msg msg color) msg)))
+  (l/note :o m-buf))
 
-(defn o/legacy-report
+(defn o/prin-summary
+  [total-tests num-fails]
+  (def total-passed (- total-tests num-fails))
+  (l/note :o "[")
+  (if (not= total-passed total-tests)
+    (o/prin-color total-passed :red)
+    (o/prin-color total-passed :green))
+  (l/note :o "/")
+  (o/prin-color total-tests :green)
+  (l/noten :o "]"))
+
+(defn o/report-fails
   [{:num-tests total-tests :fails fails}]
-  (def total-passed (- total-tests (length fails)))
   (var i 0)
   (each f fails
     (def {:test-value test-value
           :expected-value expected-value
-          :name test-name
           :line-no line-no
-          :passed test-passed
           :test-form test-form} f)
     (++ i)
-    (l/log)
-    (l/lof "--(")
-    (o/print-color i :cyan)
-    (l/log ")--")
-    (l/log)
     #
-    (o/print-color "failed:" :yellow)
-    (l/log)
-    (o/print-color (string/format "line-%d" line-no) :red)
-    (l/log)
+    (l/noten :o)
+    (l/note :o "[")
+    (o/prin-color i :cyan)
+    (l/note :o "]")
+    (l/noten :o)
     #
-    (l/log)
-    (o/print-color "form" :yellow)
-    (o/print-form test-form)
+    (l/noten :o)
+    (o/prin-color "failed:" :yellow)
+    (l/noten :o)
+    (o/prin-color (string/format "line %d" line-no) :red)
+    (l/noten :o)
     #
-    (l/log)
-    (o/print-color "expected" :yellow)
-    (o/print-form expected-value)
+    (l/noten :o)
+    (o/prin-color "form" :yellow)
+    (o/prin-form test-form)
+    (l/noten :o)
     #
-    (l/log)
-    (o/print-color "actual" :yellow)
-    (o/print-form test-value :blue))
-  (when (zero? (length fails))
-    (l/log)
-    (l/log "No tests failed."))
-  # summarize totals
-  (l/log)
-  (o/print-dashes)
-  (when (= 0 total-tests)
-    (l/log "No tests found, so no judgements made.")
-    (break true))
-  (if (not= total-passed total-tests)
-    (o/print-color total-passed :red)
-    (o/print-color total-passed :green))
-  (l/lof " of ")
-  (o/print-color total-tests :green)
-  (l/log " passed")
-  (o/print-dashes)
-  # extra newlines from original report function handling out
-  (l/log)
-  (l/log))
+    (l/noten :o)
+    (o/prin-color "expected" :yellow)
+    (o/prin-form expected-value)
+    (l/noten :o)
+    #
+    (l/noten :o)
+    (o/prin-color "actual" :yellow)
+    (o/prin-form test-value :blue)
+    (l/noten :o)))
 
 (defn o/report-std
   [content title]
   (when (and content (pos? (length content)))
     (def separator (string/repeat "-" (length title)))
-    (l/log separator)
-    (l/log title)
-    (l/log separator)
-    (l/log content)))
+    (l/noten :o separator)
+    (l/noten :o title)
+    (l/noten :o separator)
+    (l/noten :o content)))
 
 (defn o/report
   [test-results out err]
-  (o/legacy-report test-results)
+  #
+  (def failures? (not (empty? (get test-results :fails))))
+  #
+  (when failures?
+    (l/noten :o)
+    (o/prin-dashes))
+  #
+  (o/report-fails test-results)
+  #
   (when (and out (pos? (length out)))
-    (o/report-std out "stdout")
-    (l/log))
+    (l/noten :o)
+    (o/report-std out "stdout"))
+  #
   (when (and err (pos? (length err)))
-    (o/report-std err "stderr")
-    (l/log))
+    (l/noten :o)
+    (o/report-std err "stderr"))
+  #
   (when (and (zero? (get test-results :num-tests))
              (empty? out)
              (empty? err))
-    (l/log "no test output...possibly no tests")
-    (l/log)))
+    (l/noten :o)
+    (l/noten :o "no test output...possibly no tests"))
+  #
+  (when failures?
+    (o/prin-dashes)
+    (l/noten :o)))
 
 
 (comment import ./rewrite :prefix "")
@@ -3657,7 +3703,7 @@
   (def [ecode test-path test-results test-out test-err]
     (c/make-and-run input opts))
   (when (= :no-tests ecode)
-    (break :no-tests))
+    (break [:no-tests nil]))
   #
   (def {:report report} opts)
   (default report o/report)
@@ -3665,10 +3711,10 @@
   (report test-results test-out test-err)
   #
   (when (not= 0 ecode)
-    (break ecode))
+    (break [:ecode test-results]))
   #
   (os/rm test-path)
-  true)
+  [:no-fails test-results])
 
 (defn c/make-run-report
   [src-paths opts]
@@ -3680,24 +3726,31 @@
   (each path src-paths
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
-      (l/logf path)
-      (def result (c/mrr-single path opts))
-      (put b :locals @{:result result :path path})
-      (cond
-        (= true result)
-        (array/push td-paths path)
+      (l/note :i path)
+      (def single-result (c/mrr-single path opts))
+      (put b :locals @{:single-result single-result :path path})
+      (def [desc data] single-result)
+      (case desc
+        :no-tests
+        (l/noten :i " - no tests detected")
         #
-        (= :no-tests result)
-        # XXX: the 2 newlines here are cosmetic
-        (l/elogf "* no tests detected for: %s\n\n" path)
+        :no-fails
+        (do
+          (l/note :i " - ")
+          (o/prin-summary (get data :num-tests)
+                          (length (get data :fails)))
+          (array/push td-paths path))
         #
-        (int? result)
-        (e/emf b "exit code %d while testing: %s" result path)
+        :ecode
+        (do
+          (o/prin-summary (get data :num-tests)
+                          (length (get data :fails)))
+          (e/emf b "non-zero exit code while testing: %s" path))
         #
-        (e/emf b "unexpected result %p for: %s" result path))))
+        (e/emf b "unexpected result %p for: %s" desc path))))
   #
-  (l/logf "All tests completed successfully in %d file(s)."
-          (length td-paths)))
+  (l/notenf :i "All tests completed successfully in %d file(s)."
+            (length td-paths)))
 
 ########################################################################
 
@@ -3707,11 +3760,11 @@
   # try to make and run tests, then collect output
   (def [ecode test-path test-results _ _] (c/make-and-run input opts))
   (when (= :no-tests ecode)
-    (break :no-tests))
+    (break [:no-tests nil]))
   # successful run means no tests to update
   (when (zero? ecode)
     (os/rm test-path)
-    (break true))
+    (break [:no-updates nil]))
   #
   (def fails (get test-results :fails))
   (def update-info
@@ -3731,8 +3784,8 @@
   (def lines (map |(get $ 0) update-info))
   #
   (if (get opts :update-first)
-    [:stop lines]
-    [:continue lines]))
+    [:single-update lines]
+    [:multi-update lines]))
 
 (defn c/make-run-update
   [src-paths opts]
@@ -3744,36 +3797,32 @@
   (each path src-paths
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
-      (def result (c/mru-single path opts))
-      (put b :locals @{:path path :result result})
-      (cond
-        (= true result)
-        true
+      (def single-result (c/mru-single path opts))
+      (put b :locals @{:path path :single-result single-result})
+      (def [desc data] single-result)
+      (case desc
+        :no-tests
+        (l/noten :i "no tests detected")
         #
-        (= :no-tests result)
-        # XXX: the 2 newlines here are cosmetic
-        (l/elogf "* no tests detected for: %s\n\n" path)
+        :no-updates
+        (l/noten :i "no tests needed updating")
         #
-        (and (tuple? result) (= 2 (length result)))
-        (let [[action lines] result]
-          (cond
-            (= :continue action)
-            (let [cs-lines (string/join (map |(string $) lines) ", ")]
-              (array/push upd-paths path)
-              (l/logf "Test(s) updated in: %s on lines: %s"
-                      path cs-lines))
-            #
-            (= :stop action)
-            (let [first-line (get lines 0)]
-              (array/push upd-paths path)
-              (l/logf "Test updated in: %s on line: %d" path first-line)
-              (break))
-            #
-            (e/emf b "unknown action: %n" action)))
+        :multi-update
+        (let [cs-lines (string/join (map |(string $) data) ", ")]
+          (array/push upd-paths path)
+          (l/notenf :i "Test(s) updated in: %s on lines: %s"
+                    path cs-lines))
         #
-        (e/emf b "unexpected result %p for: %s" result path))))
+        :single-update
+        (let [first-line (get data 0)]
+          (array/push upd-paths path)
+          (l/notenf :i "Test updated in: %s on line: %d"
+                    path first-line)
+          (break))
+        #
+        (e/emf b "unexpected result %n for: %s" desc path))))
   #
-  (l/logf "Test(s) updated in %d file(s)." (length upd-paths)))
+  (l/notenf :i "Test(s) updated in %d file(s)." (length upd-paths)))
 
 
 (comment import ./errors :prefix "")
@@ -3863,7 +3912,7 @@
 
 ###########################################################################
 
-(def version "2026-01-06_14-48-27")
+(def version "2026-01-06_14-50-45")
 
 (def usage
   ``
@@ -3931,11 +3980,11 @@
   (def opts (a/parse-args (drop 1 args)))
   #
   (when (get opts :show-help)
-    (l/logf usage)
+    (l/noten :o usage)
     (os/exit 0))
   #
   (when (get opts :show-version)
-    (l/logf version)
+    (l/noten :o version)
     (os/exit 0))
   #
   (def src-paths
@@ -3949,7 +3998,7 @@
       (c/make-run-report src-paths opts))
     ([e f]
       (if (dictionary? e)
-        (e/show e)
+        (do (l/noten :e) (e/show e))
         (debug/stacktrace f e "internal "))
       (os/exit 1))))
 

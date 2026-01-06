@@ -74,11 +74,11 @@
   (def opts (a/parse-args (drop 1 args)))
   #
   (when (get opts :show-help)
-    (l/logf usage)
+    (l/noten :o usage)
     (os/exit 0))
   #
   (when (get opts :show-version)
-    (l/logf version)
+    (l/noten :o version)
     (os/exit 0))
   #
   (def src-paths
@@ -92,7 +92,7 @@
       (c/make-run-report src-paths opts))
     ([e f]
       (if (dictionary? e)
-        (e/show e)
+        (do (l/noten :e) (e/show e))
         (debug/stacktrace f e "internal "))
       (os/exit 1))))
 

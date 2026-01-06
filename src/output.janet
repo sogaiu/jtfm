@@ -10,7 +10,7 @@
    :white 37
    :yellow 33})
 
-(defn print-color
+(defn color-msg
   [msg color]
   (def color-num (get color-table color))
   (assertf color-num "unknown color: %n" color)
@@ -18,11 +18,16 @@
     (if (os/getenv "NO_COLOR")
       msg
       (string "\e[" color-num "m" msg "\e[0m")))
-  (l/lof real-msg))
+  #
+  real-msg)
+
+(defn prin-color
+  [msg color]
+  (l/note :o (color-msg msg color)))
 
 (comment
 
-  (def [ok? result] (protect (print-color "hey" :chartreuse)))
+  (def [ok? result] (protect (prin-color "hey" :chartreuse)))
   # =>
   [false "unknown color: :chartreuse"]
 
@@ -33,97 +38,104 @@
   (default n 60)
   (string/repeat "-" n))
 
-(defn print-dashes
+(defn prin-dashes
   [&opt n]
-  (l/log (dashes n)))
+  (l/note :o (dashes n)))
 
-(defn print-form
+(defn prin-form
   [form &opt color]
   (def buf @"")
   (with-dyns [:out buf]
     (printf "%m" form))
   (def msg (string/trimr buf))
-  (l/log ":")
-  (if color
-    (print-color msg color)
-    (l/lof msg))
-  (l/log))
+  (def m-buf
+    (buffer ":\n"
+            (if color (color-msg msg color) msg)))
+  (l/note :o m-buf))
 
-(defn legacy-report
+(defn prin-summary
+  [total-tests num-fails]
+  (def total-passed (- total-tests num-fails))
+  (l/note :o "[")
+  (if (not= total-passed total-tests)
+    (prin-color total-passed :red)
+    (prin-color total-passed :green))
+  (l/note :o "/")
+  (prin-color total-tests :green)
+  (l/noten :o "]"))
+
+(defn report-fails
   [{:num-tests total-tests :fails fails}]
-  (def total-passed (- total-tests (length fails)))
   (var i 0)
   (each f fails
     (def {:test-value test-value
           :expected-value expected-value
-          :name test-name
           :line-no line-no
-          :passed test-passed
           :test-form test-form} f)
     (++ i)
-    (l/log)
-    (l/lof "--(")
-    (print-color i :cyan)
-    (l/log ")--")
-    (l/log)
     #
-    (print-color "failed:" :yellow)
-    (l/log)
-    (print-color (string/format "line-%d" line-no) :red)
-    (l/log)
+    (l/noten :o)
+    (l/note :o "[")
+    (prin-color i :cyan)
+    (l/note :o "]")
+    (l/noten :o)
     #
-    (l/log)
-    (print-color "form" :yellow)
-    (print-form test-form)
+    (l/noten :o)
+    (prin-color "failed:" :yellow)
+    (l/noten :o)
+    (prin-color (string/format "line %d" line-no) :red)
+    (l/noten :o)
     #
-    (l/log)
-    (print-color "expected" :yellow)
-    (print-form expected-value)
+    (l/noten :o)
+    (prin-color "form" :yellow)
+    (prin-form test-form)
+    (l/noten :o)
     #
-    (l/log)
-    (print-color "actual" :yellow)
-    (print-form test-value :blue))
-  (when (zero? (length fails))
-    (l/log)
-    (l/log "No tests failed."))
-  # summarize totals
-  (l/log)
-  (print-dashes)
-  (when (= 0 total-tests)
-    (l/log "No tests found, so no judgements made.")
-    (break true))
-  (if (not= total-passed total-tests)
-    (print-color total-passed :red)
-    (print-color total-passed :green))
-  (l/lof " of ")
-  (print-color total-tests :green)
-  (l/log " passed")
-  (print-dashes)
-  # extra newlines from original report function handling out
-  (l/log)
-  (l/log))
+    (l/noten :o)
+    (prin-color "expected" :yellow)
+    (prin-form expected-value)
+    (l/noten :o)
+    #
+    (l/noten :o)
+    (prin-color "actual" :yellow)
+    (prin-form test-value :blue)
+    (l/noten :o)))
 
 (defn report-std
   [content title]
   (when (and content (pos? (length content)))
     (def separator (string/repeat "-" (length title)))
-    (l/log separator)
-    (l/log title)
-    (l/log separator)
-    (l/log content)))
+    (l/noten :o separator)
+    (l/noten :o title)
+    (l/noten :o separator)
+    (l/noten :o content)))
 
 (defn report
   [test-results out err]
-  (legacy-report test-results)
+  #
+  (def failures? (not (empty? (get test-results :fails))))
+  #
+  (when failures?
+    (l/noten :o)
+    (prin-dashes))
+  #
+  (report-fails test-results)
+  #
   (when (and out (pos? (length out)))
-    (report-std out "stdout")
-    (l/log))
+    (l/noten :o)
+    (report-std out "stdout"))
+  #
   (when (and err (pos? (length err)))
-    (report-std err "stderr")
-    (l/log))
+    (l/noten :o)
+    (report-std err "stderr"))
+  #
   (when (and (zero? (get test-results :num-tests))
              (empty? out)
              (empty? err))
-    (l/log "no test output...possibly no tests")
-    (l/log)))
+    (l/noten :o)
+    (l/noten :o "no test output...possibly no tests"))
+  #
+  (when failures?
+    (prin-dashes)
+    (l/noten :o)))
 

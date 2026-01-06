@@ -6,6 +6,7 @@
   [base fmt & args]
   (error (e/makef base fmt ;args)))
 
+# XXX: use l/note?
 (defn e/show
   [err]
   (assertf (dictionary? err) "expected dictionary but got: %n" err)
