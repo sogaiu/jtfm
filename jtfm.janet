@@ -3996,7 +3996,7 @@
 
 ###########################################################################
 
-(def version "2026-01-07_12-14-07")
+(def version "2026-01-07_14-12-01")
 
 (def usage
   ``
@@ -4091,7 +4091,7 @@
         (if (dictionary? e)
           (do (l/noten :e) (e/show e))
           (debug/stacktrace f e "internal "))
-        2)))
+        [2 @[]])))
   #
   (if (get opts :raw)
     (print (o/color-form test-results))

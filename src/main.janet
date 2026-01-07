@@ -102,7 +102,7 @@
         (if (dictionary? e)
           (do (l/noten :e) (e/show e))
           (debug/stacktrace f e "internal "))
-        2)))
+        [2 @[]])))
   #
   (if (get opts :raw)
     (print (o/color-form test-results))
