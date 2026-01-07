@@ -323,25 +323,24 @@
   #
   (when failures?
     (l/noten :o)
-    (o/prin-dashes))
-  #
-  (o/report-fails test-results)
-  #
-  (when (and out (pos? (length out)))
-    (l/noten :o)
-    (o/report-std out "stdout"))
-  #
-  (when (and err (pos? (length err)))
-    (l/noten :o)
-    (o/report-std err "stderr"))
-  #
-  (when (and (zero? (get test-results :num-tests))
-             (empty? out)
-             (empty? err))
-    (l/noten :o)
-    (l/noten :o "no test output...possibly no tests"))
-  #
-  (when failures?
+    (o/prin-dashes)
+    #
+    (o/report-fails test-results)
+    #
+    (when (and out (pos? (length out)))
+      (l/noten :o)
+      (o/report-std out "stdout"))
+    #
+    (when (and err (pos? (length err)))
+      (l/noten :o)
+      (o/report-std err "stderr"))
+    #
+    (when (and (zero? (get test-results :num-tests))
+               (empty? out)
+               (empty? err))
+      (l/noten :o)
+      (l/noten :o "no test output...possibly no tests"))
+    #
     (o/prin-dashes)
     (l/noten :o)))
 
@@ -3722,6 +3721,7 @@
   #
   (def excludes (get opts :excludes))
   (def td-paths @[])
+  (def f-paths @[])
   # generate tests, run tests, and report
   (each path src-paths
     (when (and (not (has-value? excludes path))
@@ -3745,12 +3745,17 @@
         (do
           (o/prin-summary (get data :num-tests)
                           (length (get data :fails)))
-          (e/emf b "non-zero exit code while testing: %s" path))
+          (array/push f-paths path))
         #
         (e/emf b "unexpected result %p for: %s" desc path))))
+  (def n-f-paths (length f-paths))
+  (def n-t-paths (length td-paths))
   #
-  (l/notenf :i "All tests completed successfully in %d file(s)."
-            (length td-paths)))
+  (if (empty? f-paths)
+    (l/notenf :i "All tests completed successfully in %d file(s)."
+              n-t-paths)
+    (l/notenf :i "%d of %d file(s) had test failures."
+              n-f-paths (+ n-f-paths n-t-paths))))
 
 ########################################################################
 
@@ -3912,7 +3917,7 @@
 
 ###########################################################################
 
-(def version "2026-01-06_23-51-51")
+(def version "2026-01-07_01-16-06")
 
 (def usage
   ``

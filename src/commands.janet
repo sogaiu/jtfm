@@ -73,6 +73,7 @@
   #
   (def excludes (get opts :excludes))
   (def td-paths @[])
+  (def f-paths @[])
   # generate tests, run tests, and report
   (each path src-paths
     (when (and (not (has-value? excludes path))
@@ -96,12 +97,17 @@
         (do
           (o/prin-summary (get data :num-tests)
                           (length (get data :fails)))
-          (e/emf b "non-zero exit code while testing: %s" path))
+          (array/push f-paths path))
         #
         (e/emf b "unexpected result %p for: %s" desc path))))
+  (def n-f-paths (length f-paths))
+  (def n-t-paths (length td-paths))
   #
-  (l/notenf :i "All tests completed successfully in %d file(s)."
-            (length td-paths)))
+  (if (empty? f-paths)
+    (l/notenf :i "All tests completed successfully in %d file(s)."
+              n-t-paths)
+    (l/notenf :i "%d of %d file(s) had test failures."
+              n-f-paths (+ n-f-paths n-t-paths))))
 
 ########################################################################
 

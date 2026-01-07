@@ -117,25 +117,24 @@
   #
   (when failures?
     (l/noten :o)
-    (prin-dashes))
-  #
-  (report-fails test-results)
-  #
-  (when (and out (pos? (length out)))
-    (l/noten :o)
-    (report-std out "stdout"))
-  #
-  (when (and err (pos? (length err)))
-    (l/noten :o)
-    (report-std err "stderr"))
-  #
-  (when (and (zero? (get test-results :num-tests))
-             (empty? out)
-             (empty? err))
-    (l/noten :o)
-    (l/noten :o "no test output...possibly no tests"))
-  #
-  (when failures?
+    (prin-dashes)
+    #
+    (report-fails test-results)
+    #
+    (when (and out (pos? (length out)))
+      (l/noten :o)
+      (report-std out "stdout"))
+    #
+    (when (and err (pos? (length err)))
+      (l/noten :o)
+      (report-std err "stderr"))
+    #
+    (when (and (zero? (get test-results :num-tests))
+               (empty? out)
+               (empty? err))
+      (l/noten :o)
+      (l/noten :o "no test output...possibly no tests"))
+    #
     (prin-dashes)
     (l/noten :o)))
 
