@@ -3983,7 +3983,7 @@
 
 ###########################################################################
 
-(def version "2026-01-07_07-28-50")
+(def version "2026-01-07_08-09-20")
 
 (def usage
   ``
@@ -4085,5 +4085,6 @@
     (l/notenf :i "Total processing time was %.02f secs."
               (- (os/clock) start-time)))
   #
-  (os/exit exit-code))
+  (when (not (get opts :no-exit))
+    (os/exit exit-code)))
 
