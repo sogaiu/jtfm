@@ -3,5 +3,7 @@
 # this path is relative to test dir
 (import ../jtfm)
 
+(when (= :jeep (dyn :test/runner)) (print))
+
 (jtfm/main)
 
