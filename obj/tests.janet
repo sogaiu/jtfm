@@ -4,6 +4,20 @@
 
 (def t/test-file-ext ".jtfm")
 
+(defn t/make-test-path
+  [in-path]
+  (def [fdir fname] (u/parse-path in-path))
+  #
+  (string fdir "_" fname t/test-file-ext))
+
+(comment
+
+  (t/make-test-path "tmp/hello.janet")
+  # =>
+  "tmp/_hello.janet.jtfm"
+
+  )
+
 (defn t/make-tests
   [in-path &opt opts]
   (def b {:in "make-tests" :args {:in-path in-path :opts opts}})
@@ -13,8 +27,7 @@
   (when (not test-src)
     (break nil))
   #
-  (def [fdir fname] (u/parse-path in-path))
-  (def test-path (string fdir "_" fname t/test-file-ext))
+  (def test-path (t/make-test-path in-path))
   (when (and (not (get opts :overwrite))
              (os/stat test-path :mode))
     (e/emf (merge b {:locals {:test-path test-path}})
