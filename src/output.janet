@@ -104,18 +104,15 @@
 (defn report-std
   [content title]
   (when (and content (pos? (length content)))
-    (def separator (string/repeat "-" (length title)))
-    (l/noten :o separator)
+    (def sepa (separator "-" (length title)))
+    (l/noten :o sepa)
     (l/noten :o title)
-    (l/noten :o separator)
+    (l/noten :o sepa)
     (l/noten :o content)))
 
 (defn report
   [test-results out err]
-  #
-  (def failures? (not (empty? (get test-results :fails))))
-  #
-  (when failures?
+  (when (not (empty? (get test-results :fails)))
     (l/noten :o)
     (prin-sep)
     #
