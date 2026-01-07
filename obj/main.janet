@@ -87,7 +87,9 @@
     (s/collect-paths (get opts :includes)
                      |(or (string/has-suffix? ".janet" $)
                           (s/has-janet-shebang? $))))
-  #
+  # 0 - successful testing / updating
+  # 1 - at least one test failure
+  # 2 - caught error
   (def exit-code
     (try
       (if (or (get opts :update) (get opts :update-first))
