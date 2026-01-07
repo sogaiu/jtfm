@@ -95,9 +95,9 @@
           (array/push p-paths path))
         #
         :ecode
-        (let [n-fails (length (get tr :fails))
-              n-tests (get tr :num-tests)
-              ratio (o/color-ratio n-fails n-tests)]
+        (let [n-tests (get tr :num-tests)
+              n-passes (- n-tests (length (get tr :fails)))
+              ratio (o/color-ratio n-passes n-tests)]
           (l/notenf :i "[%s]" ratio)
           (array/push f-paths path))
         #
