@@ -239,14 +239,17 @@
 
   )
 
-(defn o/dashes
-  [&opt n]
+(defn o/separator
+  [&opt str n]
+  (default str "-")
   (default n 60)
-  (string/repeat "-" n))
+  (string/repeat str n))
 
-(defn o/prin-dashes
-  [&opt n]
-  (l/note :o (o/dashes n)))
+(defn o/prin-sep
+  [&opt str n]
+  (default str "-")
+  (default n 60)
+  (l/note :o (o/separator str n)))
 
 (defn o/prin-form
   [form &opt color]
@@ -259,16 +262,13 @@
             (if color (o/color-msg msg color) msg)))
   (l/note :o m-buf))
 
-(defn o/prin-summary
-  [total-tests num-fails]
-  (def total-passed (- total-tests num-fails))
-  (l/note :o "[")
-  (if (not= total-passed total-tests)
-    (o/prin-color total-passed :red)
-    (o/prin-color total-passed :green))
-  (l/note :o "/")
-  (o/prin-color total-tests :green)
-  (l/noten :o "]"))
+(defn o/color-ratio
+  [num denom]
+  (buffer (if (not= num denom)
+            (o/color-msg num :red)
+            (o/color-msg num :green))
+          "/"
+          (o/color-msg denom :green)))
 
 (defn o/report-fails
   [{:num-tests total-tests :fails fails}]
@@ -310,10 +310,10 @@
 (defn o/report-std
   [content title]
   (when (and content (pos? (length content)))
-    (def separator (string/repeat "-" (length title)))
-    (l/noten :o separator)
+    (def o/separator (string/repeat "-" (length title)))
+    (l/noten :o o/separator)
     (l/noten :o title)
-    (l/noten :o separator)
+    (l/noten :o o/separator)
     (l/noten :o content)))
 
 (defn o/report
@@ -323,7 +323,7 @@
   #
   (when failures?
     (l/noten :o)
-    (o/prin-dashes)
+    (o/prin-sep)
     #
     (o/report-fails test-results)
     #
@@ -341,7 +341,7 @@
       (l/noten :o)
       (l/noten :o "no test output...possibly no tests"))
     #
-    (o/prin-dashes)
+    (o/prin-sep)
     (l/noten :o)))
 
 
@@ -3720,7 +3720,7 @@
   (def b @{:in "make-run-report" :args {:src-paths src-paths :opts opts}})
   #
   (def excludes (get opts :excludes))
-  (def td-paths @[])
+  (def p-paths @[])
   (def f-paths @[])
   # generate tests, run tests, and report
   (each path src-paths
@@ -3735,27 +3735,29 @@
         (l/noten :i " - no tests found")
         #
         :no-fails
-        (do
-          (l/note :i " - ")
-          (o/prin-summary (get data :num-tests)
-                          (length (get data :fails)))
-          (array/push td-paths path))
+        (let [n-tests (get data :num-tests)
+              ratio (o/color-ratio n-tests n-tests)]
+          (l/notenf :i " - [%s]" ratio)
+          (array/push p-paths path))
         #
         :ecode
-        (do
-          (o/prin-summary (get data :num-tests)
-                          (length (get data :fails)))
+        (let [n-fails (length (get data :fails))
+              n-tests (get data :num-tests)
+              ratio (o/color-ratio n-fails n-tests)]
+          (l/notenf :i "[%s]" ratio)
           (array/push f-paths path))
         #
         (e/emf b "unexpected result %p for: %s" desc path))))
+  #
+  (l/notenf :i (o/separator "="))
   (def n-f-paths (length f-paths))
-  (def n-t-paths (length td-paths))
+  (def n-p-paths (length p-paths))
   #
   (if (empty? f-paths)
-    (l/notenf :i "All tests completed successfully in %d file(s)."
-              n-t-paths)
-    (l/notenf :i "%d of %d file(s) had test failures."
-              n-f-paths (+ n-f-paths n-t-paths))))
+    (l/notenf :i "All tests successful in %d file(s)."
+              n-p-paths)
+    (l/notenf :i "Test failures in %d of %d file(s)."
+              n-f-paths (+ n-f-paths n-p-paths))))
 
 ########################################################################
 
@@ -3917,7 +3919,7 @@
 
 ###########################################################################
 
-(def version "2026-01-07_01-16-06")
+(def version "2026-01-07_01-40-04")
 
 (def usage
   ``

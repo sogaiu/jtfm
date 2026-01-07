@@ -33,14 +33,17 @@
 
   )
 
-(defn o/dashes
-  [&opt n]
+(defn o/separator
+  [&opt str n]
+  (default str "-")
   (default n 60)
-  (string/repeat "-" n))
+  (string/repeat str n))
 
-(defn o/prin-dashes
-  [&opt n]
-  (l/note :o (o/dashes n)))
+(defn o/prin-sep
+  [&opt str n]
+  (default str "-")
+  (default n 60)
+  (l/note :o (o/separator str n)))
 
 (defn o/prin-form
   [form &opt color]
@@ -53,16 +56,13 @@
             (if color (o/color-msg msg color) msg)))
   (l/note :o m-buf))
 
-(defn o/prin-summary
-  [total-tests num-fails]
-  (def total-passed (- total-tests num-fails))
-  (l/note :o "[")
-  (if (not= total-passed total-tests)
-    (o/prin-color total-passed :red)
-    (o/prin-color total-passed :green))
-  (l/note :o "/")
-  (o/prin-color total-tests :green)
-  (l/noten :o "]"))
+(defn o/color-ratio
+  [num denom]
+  (buffer (if (not= num denom)
+            (o/color-msg num :red)
+            (o/color-msg num :green))
+          "/"
+          (o/color-msg denom :green)))
 
 (defn o/report-fails
   [{:num-tests total-tests :fails fails}]
@@ -104,10 +104,10 @@
 (defn o/report-std
   [content title]
   (when (and content (pos? (length content)))
-    (def separator (string/repeat "-" (length title)))
-    (l/noten :o separator)
+    (def o/separator (string/repeat "-" (length title)))
+    (l/noten :o o/separator)
     (l/noten :o title)
-    (l/noten :o separator)
+    (l/noten :o o/separator)
     (l/noten :o content)))
 
 (defn o/report
@@ -117,7 +117,7 @@
   #
   (when failures?
     (l/noten :o)
-    (o/prin-dashes)
+    (o/prin-sep)
     #
     (o/report-fails test-results)
     #
@@ -135,6 +135,6 @@
       (l/noten :o)
       (l/noten :o "no test output...possibly no tests"))
     #
-    (o/prin-dashes)
+    (o/prin-sep)
     (l/noten :o)))
 

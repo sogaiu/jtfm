@@ -33,14 +33,17 @@
 
   )
 
-(defn dashes
-  [&opt n]
+(defn separator
+  [&opt str n]
+  (default str "-")
   (default n 60)
-  (string/repeat "-" n))
+  (string/repeat str n))
 
-(defn prin-dashes
-  [&opt n]
-  (l/note :o (dashes n)))
+(defn prin-sep
+  [&opt str n]
+  (default str "-")
+  (default n 60)
+  (l/note :o (separator str n)))
 
 (defn prin-form
   [form &opt color]
@@ -53,16 +56,13 @@
             (if color (color-msg msg color) msg)))
   (l/note :o m-buf))
 
-(defn prin-summary
-  [total-tests num-fails]
-  (def total-passed (- total-tests num-fails))
-  (l/note :o "[")
-  (if (not= total-passed total-tests)
-    (prin-color total-passed :red)
-    (prin-color total-passed :green))
-  (l/note :o "/")
-  (prin-color total-tests :green)
-  (l/noten :o "]"))
+(defn color-ratio
+  [num denom]
+  (buffer (if (not= num denom)
+            (color-msg num :red)
+            (color-msg num :green))
+          "/"
+          (color-msg denom :green)))
 
 (defn report-fails
   [{:num-tests total-tests :fails fails}]
@@ -117,7 +117,7 @@
   #
   (when failures?
     (l/noten :o)
-    (prin-dashes)
+    (prin-sep)
     #
     (report-fails test-results)
     #
@@ -135,6 +135,6 @@
       (l/noten :o)
       (l/noten :o "no test output...possibly no tests"))
     #
-    (prin-dashes)
+    (prin-sep)
     (l/noten :o)))
 

@@ -72,7 +72,7 @@
   (def b @{:in "make-run-report" :args {:src-paths src-paths :opts opts}})
   #
   (def excludes (get opts :excludes))
-  (def td-paths @[])
+  (def p-paths @[])
   (def f-paths @[])
   # generate tests, run tests, and report
   (each path src-paths
@@ -87,27 +87,29 @@
         (l/noten :i " - no tests found")
         #
         :no-fails
-        (do
-          (l/note :i " - ")
-          (o/prin-summary (get data :num-tests)
-                          (length (get data :fails)))
-          (array/push td-paths path))
+        (let [n-tests (get data :num-tests)
+              ratio (o/color-ratio n-tests n-tests)]
+          (l/notenf :i " - [%s]" ratio)
+          (array/push p-paths path))
         #
         :ecode
-        (do
-          (o/prin-summary (get data :num-tests)
-                          (length (get data :fails)))
+        (let [n-fails (length (get data :fails))
+              n-tests (get data :num-tests)
+              ratio (o/color-ratio n-fails n-tests)]
+          (l/notenf :i "[%s]" ratio)
           (array/push f-paths path))
         #
         (e/emf b "unexpected result %p for: %s" desc path))))
+  #
+  (l/notenf :i (o/separator "="))
   (def n-f-paths (length f-paths))
-  (def n-t-paths (length td-paths))
+  (def n-p-paths (length p-paths))
   #
   (if (empty? f-paths)
-    (l/notenf :i "All tests completed successfully in %d file(s)."
-              n-t-paths)
-    (l/notenf :i "%d of %d file(s) had test failures."
-              n-f-paths (+ n-f-paths n-t-paths))))
+    (l/notenf :i "All tests successful in %d file(s)."
+              n-p-paths)
+    (l/notenf :i "Test failures in %d of %d file(s)."
+              n-f-paths (+ n-f-paths n-p-paths))))
 
 ########################################################################
 
