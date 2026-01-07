@@ -74,6 +74,7 @@
   (def excludes (get opts :excludes))
   (def p-paths @[])
   (def f-paths @[])
+  (def test-results @[])
   # generate tests, run tests, and report
   (each path src-paths
     (when (and (not (has-value? excludes path))
@@ -81,20 +82,21 @@
       (l/note :i path)
       (def single-result (c/mrr-single path opts))
       (put b :locals @{:single-result single-result :path path})
-      (def [desc data] single-result)
+      (def [desc tr] single-result)
+      (array/push test-results [path tr])
       (case desc
         :no-tests
         (l/noten :i " - no tests found")
         #
         :no-fails
-        (let [n-tests (get data :num-tests)
+        (let [n-tests (get tr :num-tests)
               ratio (o/color-ratio n-tests n-tests)]
           (l/notenf :i " - [%s]" ratio)
           (array/push p-paths path))
         #
         :ecode
-        (let [n-fails (length (get data :fails))
-              n-tests (get data :num-tests)
+        (let [n-fails (length (get tr :fails))
+              n-tests (get tr :num-tests)
               ratio (o/color-ratio n-fails n-tests)]
           (l/notenf :i "[%s]" ratio)
           (array/push f-paths path))
@@ -111,7 +113,8 @@
     (l/notenf :i "Test failures in %d of %d file(s)."
               n-f-paths (+ n-f-paths n-p-paths)))
   #
-  (if (zero? n-f-paths) 0 1))
+  [(if (zero? n-f-paths) 0 1)
+   test-results])
 
 ########################################################################
 
@@ -121,11 +124,11 @@
   # try to make and run tests, then collect output
   (def [ecode test-path test-results _ _] (c/make-and-run input opts))
   (when (= :no-tests ecode)
-    (break [:no-tests nil]))
+    (break [:no-tests nil test-results]))
   # successful run means no tests to update
   (when (zero? ecode)
     (os/rm test-path)
-    (break [:no-updates nil]))
+    (break [:no-updates nil test-results]))
   #
   (def fails (get test-results :fails))
   (def update-info
@@ -145,8 +148,8 @@
   (def lines (map |(get $ 0) update-info))
   #
   (if (get opts :update-first)
-    [:single-update lines]
-    [:multi-update lines]))
+    [:single-update lines test-results]
+    [:multi-update lines test-results]))
 
 (defn c/make-run-update
   [src-paths opts]
@@ -154,13 +157,15 @@
   #
   (def excludes (get opts :excludes))
   (def upd-paths @[])
+  (def test-results @[])
   # generate tests, run tests, and update
   (each path src-paths
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
       (def single-result (c/mru-single path opts))
       (put b :locals @{:path path :single-result single-result})
-      (def [desc data] single-result)
+      (def [desc data tr] single-result)
+      (array/push test-results [path tr])
       (case desc
         :no-tests
         (l/noten :i "no tests found")
@@ -185,5 +190,5 @@
   #
   (l/notenf :i "Test(s) updated in %d file(s)." (length upd-paths))
   #
-  0)
+  [0 test-results])
 

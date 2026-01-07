@@ -56,6 +56,35 @@
             (if color (o/color-msg msg color) msg)))
   (l/note :o m-buf))
 
+(defn o/color-form
+  [form]
+  (def leader
+    (if (or (array? form) (table? form) (buffer? form))
+      "@" ""))
+  (def fmt-str
+    (if (os/getenv "NO_COLOR") "%m" "%M"))
+  (def buf @"")
+  (cond
+    (indexed? form)
+    (do
+      (buffer/push buf leader "[\n")
+      (each f form
+        (with-dyns [:out buf] (printf fmt-str f)))
+      (buffer/push buf "]"))
+    #
+    (dictionary? form)
+    (do
+      (buffer/push buf leader "{\n")
+      (eachp [k v] form
+        (with-dyns [:out buf]
+          (printf fmt-str k)
+          (printf fmt-str v)))
+      (buffer/push buf "}"))
+    #
+    (with-dyns [:out buf] (printf fmt-str form)))
+  #
+  buf)
+
 (defn o/color-ratio
   [num denom]
   (buffer (if (not= num denom)

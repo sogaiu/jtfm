@@ -59,3 +59,33 @@
   #
   (dispatch-fn ;args))
 
+########################################################################
+
+(def ignore-table
+  {:w (fn :w [& _] nil)
+   :e (fn :e [& _] nil)
+   :i (fn :i [& _] nil)
+   :o (fn :o [& _] nil)})
+
+(defn set-d-tables!
+  [{:d d :df df :dn dn :dnf dnf}]
+  (default d d-table)
+  (default df df-table)
+  (default dn dn-table)
+  (default dnf dnf-table)
+  (setdyn :d-table d)
+  (setdyn :df-table df)
+  (setdyn :dn-table dn)
+  (setdyn :dnf-table dnf))
+
+(defn clear-d-tables!
+  []
+  (set-d-tables! {:d ignore-table
+                  :df ignore-table
+                  :dn ignore-table
+                  :dnf ignore-table}))
+
+(defn reset-d-tables!
+  []
+  (set-d-tables! {}))
+

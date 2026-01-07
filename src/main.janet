@@ -2,6 +2,7 @@
 (import ./commands :as c)
 (import ./errors :as e)
 (import ./log :as l)
+(import ./output :as o)
 (import ./search :as s)
 
 ###########################################################################
@@ -87,10 +88,12 @@
     (s/collect-paths (get opts :includes)
                      |(or (string/has-suffix? ".janet" $)
                           (s/has-janet-shebang? $))))
+  (when (get opts :raw)
+    (l/clear-d-tables!))
   # 0 - successful testing / updating
   # 1 - at least one test failure
   # 2 - caught error
-  (def exit-code
+  (def [exit-code test-results]
     (try
       (if (or (get opts :update) (get opts :update-first))
         (c/make-run-update src-paths opts)
@@ -101,8 +104,10 @@
           (debug/stacktrace f e "internal "))
         2)))
   #
-  (l/notenf :i "Total processing time was %.02f secs."
-            (- (os/clock) start-time))
+  (if (get opts :raw)
+    (print (o/color-form test-results))
+    (l/notenf :i "Total processing time was %.02f secs."
+              (- (os/clock) start-time)))
   #
   (os/exit exit-code))
 

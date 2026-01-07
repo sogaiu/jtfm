@@ -201,6 +201,36 @@
   #
   (dispatch-fn ;args))
 
+########################################################################
+
+(def l/ignore-table
+  {:w (fn :w [& _] nil)
+   :e (fn :e [& _] nil)
+   :i (fn :i [& _] nil)
+   :o (fn :o [& _] nil)})
+
+(defn l/set-d-tables!
+  [{:d d :df df :dn dn :dnf dnf}]
+  (default d l/d-table)
+  (default df l/df-table)
+  (default dn l/dn-table)
+  (default dnf l/dnf-table)
+  (setdyn :d-table d)
+  (setdyn :df-table df)
+  (setdyn :dn-table dn)
+  (setdyn :dnf-table dnf))
+
+(defn l/clear-d-tables!
+  []
+  (l/set-d-tables! {:d l/ignore-table
+                  :df l/ignore-table
+                  :dn l/ignore-table
+                  :dnf l/ignore-table}))
+
+(defn l/reset-d-tables!
+  []
+  (l/set-d-tables! {}))
+
 
 (comment import ./output :prefix "")
 (comment import ./log :prefix "")
@@ -261,6 +291,35 @@
     (buffer ":\n"
             (if color (o/color-msg msg color) msg)))
   (l/note :o m-buf))
+
+(defn o/color-form
+  [form]
+  (def leader
+    (if (or (array? form) (table? form) (buffer? form))
+      "@" ""))
+  (def fmt-str
+    (if (os/getenv "NO_COLOR") "%m" "%M"))
+  (def buf @"")
+  (cond
+    (indexed? form)
+    (do
+      (buffer/push buf leader "[\n")
+      (each f form
+        (with-dyns [:out buf] (printf fmt-str f)))
+      (buffer/push buf "]"))
+    #
+    (dictionary? form)
+    (do
+      (buffer/push buf leader "{\n")
+      (eachp [k v] form
+        (with-dyns [:out buf]
+          (printf fmt-str k)
+          (printf fmt-str v)))
+      (buffer/push buf "}"))
+    #
+    (with-dyns [:out buf] (printf fmt-str form)))
+  #
+  buf)
 
 (defn o/color-ratio
   [num denom]
@@ -3719,6 +3778,7 @@
   (def excludes (get opts :excludes))
   (def p-paths @[])
   (def f-paths @[])
+  (def test-results @[])
   # generate tests, run tests, and report
   (each path src-paths
     (when (and (not (has-value? excludes path))
@@ -3726,20 +3786,21 @@
       (l/note :i path)
       (def single-result (c/mrr-single path opts))
       (put b :locals @{:single-result single-result :path path})
-      (def [desc data] single-result)
+      (def [desc tr] single-result)
+      (array/push test-results [path tr])
       (case desc
         :no-tests
         (l/noten :i " - no tests found")
         #
         :no-fails
-        (let [n-tests (get data :num-tests)
+        (let [n-tests (get tr :num-tests)
               ratio (o/color-ratio n-tests n-tests)]
           (l/notenf :i " - [%s]" ratio)
           (array/push p-paths path))
         #
         :ecode
-        (let [n-fails (length (get data :fails))
-              n-tests (get data :num-tests)
+        (let [n-fails (length (get tr :fails))
+              n-tests (get tr :num-tests)
               ratio (o/color-ratio n-fails n-tests)]
           (l/notenf :i "[%s]" ratio)
           (array/push f-paths path))
@@ -3756,7 +3817,8 @@
     (l/notenf :i "Test failures in %d of %d file(s)."
               n-f-paths (+ n-f-paths n-p-paths)))
   #
-  (if (zero? n-f-paths) 0 1))
+  [(if (zero? n-f-paths) 0 1)
+   test-results])
 
 ########################################################################
 
@@ -3766,11 +3828,11 @@
   # try to make and run tests, then collect output
   (def [ecode test-path test-results _ _] (c/make-and-run input opts))
   (when (= :no-tests ecode)
-    (break [:no-tests nil]))
+    (break [:no-tests nil test-results]))
   # successful run means no tests to update
   (when (zero? ecode)
     (os/rm test-path)
-    (break [:no-updates nil]))
+    (break [:no-updates nil test-results]))
   #
   (def fails (get test-results :fails))
   (def update-info
@@ -3790,8 +3852,8 @@
   (def lines (map |(get $ 0) update-info))
   #
   (if (get opts :update-first)
-    [:single-update lines]
-    [:multi-update lines]))
+    [:single-update lines test-results]
+    [:multi-update lines test-results]))
 
 (defn c/make-run-update
   [src-paths opts]
@@ -3799,13 +3861,15 @@
   #
   (def excludes (get opts :excludes))
   (def upd-paths @[])
+  (def test-results @[])
   # generate tests, run tests, and update
   (each path src-paths
     (when (and (not (has-value? excludes path))
                (= :file (os/stat path :mode)))
       (def single-result (c/mru-single path opts))
       (put b :locals @{:path path :single-result single-result})
-      (def [desc data] single-result)
+      (def [desc data tr] single-result)
+      (array/push test-results [path tr])
       (case desc
         :no-tests
         (l/noten :i "no tests found")
@@ -3830,12 +3894,14 @@
   #
   (l/notenf :i "Test(s) updated in %d file(s)." (length upd-paths))
   #
-  0)
+  [0 test-results])
 
 
 (comment import ./errors :prefix "")
 
 (comment import ./log :prefix "")
+
+(comment import ./output :prefix "")
 
 (comment import ./search :prefix "")
 (def s/sep
@@ -3920,7 +3986,7 @@
 
 ###########################################################################
 
-(def version "2026-01-07_02-59-02")
+(def version "2026-01-07_04-20-18")
 
 (def usage
   ``
@@ -4001,10 +4067,12 @@
     (s/collect-paths (get opts :includes)
                      |(or (string/has-suffix? ".janet" $)
                           (s/has-janet-shebang? $))))
+  (when (get opts :raw)
+    (l/clear-d-tables!))
   # 0 - successful testing / updating
   # 1 - at least one test failure
   # 2 - caught error
-  (def exit-code
+  (def [exit-code test-results]
     (try
       (if (or (get opts :update) (get opts :update-first))
         (c/make-run-update src-paths opts)
@@ -4015,8 +4083,10 @@
           (debug/stacktrace f e "internal "))
         2)))
   #
-  (l/notenf :i "Total processing time was %.02f secs."
-            (- (os/clock) start-time))
+  (if (get opts :raw)
+    (print (o/color-form test-results))
+    (l/notenf :i "Total processing time was %.02f secs."
+              (- (os/clock) start-time)))
   #
   (os/exit exit-code))
 
