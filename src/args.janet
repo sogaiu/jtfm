@@ -61,10 +61,9 @@
          (array ;(get cnf :excludes @[]))])
       #
       (e/emf b "unexpected result parsing args: %n" args)))
-  # XXX: struct has precedence over env var...is that desirable?
-  (when (and (not (false? (get opts :no-color)))
-             (os/getenv "NO_COLOR"))
-    (put opts :no-color true))
+  #
+  (setdyn :test/color?
+          (not (or (os/getenv "NO_COLOR") (get opts :no-color))))
   #
   (defn merge-indexed
     [left right]
@@ -78,9 +77,9 @@
 
 (comment
 
-  (def old-val (os/getenv "NO_COLOR"))
+  (def old-value (dyn :test/color?))
 
-  (os/setenv "NO_COLOR" nil)
+  (setdyn :test/color? false)
 
   (parse-args ["src/main.janet"])
   # =>
@@ -102,7 +101,7 @@
   @{:excludes @["src/args.janet"]
     :includes @["src/main.janet"]}
 
-  (os/setenv "NO_COLOR" old-val)
+  (setdyn :test/color? old-value)
 
   )
 

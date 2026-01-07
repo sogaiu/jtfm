@@ -14,12 +14,10 @@
   [msg color]
   (def color-num (get o/color-table color))
   (assertf color-num "unknown color: %n" color)
-  (def real-msg
-    (if (os/getenv "NO_COLOR")
-      msg
-      (string "\e[" color-num "m" msg "\e[0m")))
   #
-  real-msg)
+  (if (dyn :test/color?)
+    (string "\e[" color-num "m" msg "\e[0m")
+    msg))
 
 (defn o/prin-color
   [msg color]
@@ -62,7 +60,7 @@
     (if (or (array? form) (table? form) (buffer? form))
       "@" ""))
   (def fmt-str
-    (if (os/getenv "NO_COLOR") "%m" "%M"))
+    (if (dyn :test/color?) "%M" "%m"))
   (def buf @"")
   (cond
     (indexed? form)

@@ -90,10 +90,9 @@
          (array ;(get cnf :excludes @[]))])
       #
       (e/emf b "unexpected result parsing args: %n" args)))
-  # XXX: struct has precedence over env var...is that desirable?
-  (when (and (not (false? (get opts :no-color)))
-             (os/getenv "NO_COLOR"))
-    (put opts :no-color true))
+  #
+  (setdyn :test/color?
+          (not (or (os/getenv "NO_COLOR") (get opts :no-color))))
   #
   (defn merge-indexed
     [left right]
@@ -107,9 +106,9 @@
 
 (comment
 
-  (def old-val (os/getenv "NO_COLOR"))
+  (def old-value (dyn :test/color?))
 
-  (os/setenv "NO_COLOR" nil)
+  (setdyn :test/color? false)
 
   (a/parse-args ["src/main.janet"])
   # =>
@@ -131,7 +130,7 @@
   @{:excludes @["src/args.janet"]
     :includes @["src/main.janet"]}
 
-  (os/setenv "NO_COLOR" old-val)
+  (setdyn :test/color? old-value)
 
   )
 
@@ -250,12 +249,10 @@
   [msg color]
   (def color-num (get o/color-table color))
   (assertf color-num "unknown color: %n" color)
-  (def real-msg
-    (if (os/getenv "NO_COLOR")
-      msg
-      (string "\e[" color-num "m" msg "\e[0m")))
   #
-  real-msg)
+  (if (dyn :test/color?)
+    (string "\e[" color-num "m" msg "\e[0m")
+    msg))
 
 (defn o/prin-color
   [msg color]
@@ -298,7 +295,7 @@
     (if (or (array? form) (table? form) (buffer? form))
       "@" ""))
   (def fmt-str
-    (if (os/getenv "NO_COLOR") "%m" "%M"))
+    (if (dyn :test/color?) "%M" "%m"))
   (def buf @"")
   (cond
     (indexed? form)
@@ -3741,7 +3738,7 @@
   #
   (def fmt-str
     (string/format "unreadable value in:\n%s"
-                   (if (get opts :no-color) "%m" "%M")))
+                   (if (dyn :test/color?) "%M" "%m")))
   (when test-unreadable?
     (e/emf b fmt-str test-unreadable?))
   #
@@ -3986,7 +3983,7 @@
 
 ###########################################################################
 
-(def version "2026-01-07_06-43-13")
+(def version "2026-01-07_07-28-50")
 
 (def usage
   ``

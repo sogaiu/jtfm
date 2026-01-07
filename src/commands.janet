@@ -37,7 +37,7 @@
   #
   (def fmt-str
     (string/format "unreadable value in:\n%s"
-                   (if (get opts :no-color) "%m" "%M")))
+                   (if (dyn :test/color?) "%M" "%m")))
   (when test-unreadable?
     (e/emf b fmt-str test-unreadable?))
   #
