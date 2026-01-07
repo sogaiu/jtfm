@@ -11,7 +11,8 @@
                  "data/all-tests-pass"))
     (parse buf))
   # =>
-  (parse (slurp "data/all-tests-pass.txt"))
+  @[["data/all-tests-pass/one.janet" @{:fails @[] :num-tests 2}]
+    ["data/all-tests-pass/two.janet" @{:fails @[] :num-tests 2}]]
 
   )
 
