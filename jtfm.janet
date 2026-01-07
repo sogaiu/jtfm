@@ -3923,7 +3923,7 @@
 
 ###########################################################################
 
-(def version "2026-01-07_02-18-15")
+(def version "2026-01-07_02-27-32")
 
 (def usage
   ``
@@ -4014,7 +4014,7 @@
         (if (dictionary? e)
           (do (l/noten :e) (e/show e))
           (debug/stacktrace f e "internal "))
-        1)))
+        2)))
   #
   (l/notenf :i "Total processing time was %.02f secs."
             (- (os/clock) start-time))
