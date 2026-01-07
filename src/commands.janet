@@ -109,7 +109,9 @@
     (l/notenf :i "All tests successful in %d file(s)."
               n-p-paths)
     (l/notenf :i "Test failures in %d of %d file(s)."
-              n-f-paths (+ n-f-paths n-p-paths))))
+              n-f-paths (+ n-f-paths n-p-paths)))
+  #
+  (if (zero? n-f-paths) 0 1))
 
 ########################################################################
 
@@ -181,5 +183,7 @@
         #
         (e/emf b "unexpected result %n for: %s" desc path))))
   #
-  (l/notenf :i "Test(s) updated in %d file(s)." (length upd-paths)))
+  (l/notenf :i "Test(s) updated in %d file(s)." (length upd-paths))
+  #
+  0)
 

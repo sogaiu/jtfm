@@ -3757,7 +3757,9 @@
     (l/notenf :i "All tests successful in %d file(s)."
               n-p-paths)
     (l/notenf :i "Test failures in %d of %d file(s)."
-              n-f-paths (+ n-f-paths n-p-paths))))
+              n-f-paths (+ n-f-paths n-p-paths)))
+  #
+  (if (zero? n-f-paths) 0 1))
 
 ########################################################################
 
@@ -3829,7 +3831,9 @@
         #
         (e/emf b "unexpected result %n for: %s" desc path))))
   #
-  (l/notenf :i "Test(s) updated in %d file(s)." (length upd-paths)))
+  (l/notenf :i "Test(s) updated in %d file(s)." (length upd-paths))
+  #
+  0)
 
 
 (comment import ./errors :prefix "")
@@ -3919,7 +3923,7 @@
 
 ###########################################################################
 
-(def version "2026-01-07_01-52-01")
+(def version "2026-01-07_02-18-15")
 
 (def usage
   ``
@@ -3985,35 +3989,35 @@
 (defn main
   [& args]
   (def start-time (os/clock))
-  (var ec 0)
   #
   (def opts (a/parse-args (drop 1 args)))
   #
   (when (get opts :show-help)
     (l/noten :o usage)
-    (os/exit ec))
+    (os/exit 0))
   #
   (when (get opts :show-version)
     (l/noten :o version)
-    (os/exit ec))
+    (os/exit 0))
   #
   (def src-paths
     (s/collect-paths (get opts :includes)
                      |(or (string/has-suffix? ".janet" $)
                           (s/has-janet-shebang? $))))
   #
-  (try
-    (if (or (get opts :update) (get opts :update-first))
-      (c/make-run-update src-paths opts)
-      (c/make-run-report src-paths opts))
-    ([e f]
-      (set ec 1)
-      (if (dictionary? e)
-        (do (l/noten :e) (e/show e))
-        (debug/stacktrace f e "internal "))))
+  (def exit-code
+    (try
+      (if (or (get opts :update) (get opts :update-first))
+        (c/make-run-update src-paths opts)
+        (c/make-run-report src-paths opts))
+      ([e f]
+        (if (dictionary? e)
+          (do (l/noten :e) (e/show e))
+          (debug/stacktrace f e "internal "))
+        1)))
   #
   (l/notenf :i "Total processing time was %.02f secs."
             (- (os/clock) start-time))
   #
-  (os/exit ec))
+  (os/exit exit-code))
 
