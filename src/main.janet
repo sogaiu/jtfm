@@ -71,15 +71,18 @@
 
 (defn main
   [& args]
+  (def start-time (os/clock))
+  (var ec 0)
+  #
   (def opts (a/parse-args (drop 1 args)))
   #
   (when (get opts :show-help)
     (l/noten :o usage)
-    (os/exit 0))
+    (os/exit ec))
   #
   (when (get opts :show-version)
     (l/noten :o version)
-    (os/exit 0))
+    (os/exit ec))
   #
   (def src-paths
     (s/collect-paths (get opts :includes)
@@ -91,8 +94,13 @@
       (c/make-run-update src-paths opts)
       (c/make-run-report src-paths opts))
     ([e f]
+      (set ec 1)
       (if (dictionary? e)
         (do (l/noten :e) (e/show e))
-        (debug/stacktrace f e "internal "))
-      (os/exit 1))))
+        (debug/stacktrace f e "internal "))))
+  #
+  (l/notenf :i "Total processing time was %.02f secs."
+            (- (os/clock) start-time))
+  #
+  (os/exit ec))
 
