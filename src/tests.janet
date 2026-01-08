@@ -18,19 +18,6 @@
 
   )
 
-(defn make-lint-path
-  [in-path]
-  #
-  (string (make-test-path in-path) "-lint"))
-
-(comment
-
-  (make-lint-path "tmp/hello.janet")
-  # =>
-  "tmp/_hello.janet.jtfm-lint"
-
-  )
-
 (defn make-tests
   [in-path &opt opts]
   (def b {:in "make-tests" :args {:in-path in-path :opts opts}})
@@ -124,4 +111,72 @@
    "hello this is a line\nand so is this\n"]
 
   )
+
+(defn make-lint-path
+  [in-path]
+  #
+  (string (make-test-path in-path) "-lint"))
+
+(comment
+
+  (make-lint-path "tmp/hello.janet")
+  # =>
+  "tmp/_hello.janet.jtfm-lint"
+
+  )
+
+(defn lint-and-get-error
+  [input]
+  (def lint-path (make-lint-path input))
+  (defer (os/rm lint-path)
+    (def lint-src (r/rewrite-as-file-to-lint (slurp input)))
+    (spit lint-path lint-src)
+    (def lint-buf @"")
+    (with-dyns [:err lint-buf] (flycheck lint-path))
+    # XXX: peg may need work
+    (peg/match ~(sequence "error: " (to ":") (capture (to "\n")))
+               lint-buf)))
+
+(defn has-unreadable?
+  [test-results]
+  (var unreadable? nil)
+  (each f (get test-results :fails)
+    (when (get f :test-unreadable)
+      (set unreadable? f)
+      (break))
+    #
+    (when (get f :expected-unreadable)
+      (set unreadable? f)
+      (break)))
+  #
+  unreadable?)
+
+(defn make-and-run
+  [input &opt opts]
+  (def b @{:in "make-and-run" :args {:input input :opts opts}})
+  #
+  (default opts @{})
+  # create test source
+  (def result (make-tests input opts))
+  (when (not result)
+    (break [:no-tests nil nil nil]))
+  #
+  (def test-path result)
+  # run tests and collect output
+  (def [exit-code out err] (run-tests test-path))
+  (os/rm test-path)
+  #
+  (when (empty? out)
+    (def m (lint-and-get-error input))
+    (e/emf (merge b {:locals {:exit-code exit-code :out out :err err}})
+           "possible problem in input source\n  %s%s"
+           input (if m (first m) "")))
+  #
+  (def [test-results test-out] (parse-output out))
+  (when-let [unreadable (has-unreadable? test-results)]
+    (e/emf b (string/format "unreadable value in:\n%s"
+                            (if (dyn :test/color?) "%M" "%m"))
+           unreadable))
+  #
+  [exit-code test-results test-out err])
 

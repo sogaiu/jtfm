@@ -4,68 +4,13 @@
 (import ./rewrite :prefix "")
 (import ./tests :prefix "")
 
-(defn c/lint-and-get-error
-  [input]
-  (def lint-path (t/make-lint-path input))
-  (defer (os/rm lint-path)
-    (def lint-src (r/rewrite-as-file-to-lint (slurp input)))
-    (spit lint-path lint-src)
-    (def lint-buf @"")
-    (with-dyns [:err lint-buf] (flycheck lint-path))
-    # XXX: peg may need work
-    (peg/match ~(sequence "error: " (to ":") (capture (to "\n")))
-               lint-buf)))
-
-(defn c/has-unreadable?
-  [test-results]
-  (var unreadable? nil)
-  (each f (get test-results :fails)
-    (when (get f :test-unreadable)
-      (set unreadable? f)
-      (break))
-    #
-    (when (get f :expected-unreadable)
-      (set unreadable? f)
-      (break)))
-  #
-  unreadable?)
-
-(defn c/make-and-run
-  [input &opt opts]
-  (def b @{:in "make-and-run" :args {:input input :opts opts}})
-  #
-  (default opts @{})
-  # create test source
-  (def result (t/make-tests input opts))
-  (when (not result)
-    (break [:no-tests nil nil nil]))
-  #
-  (def test-path result)
-  # run tests and collect output
-  (def [exit-code out err] (t/run-tests test-path))
-  (os/rm test-path)
-  #
-  (when (empty? out)
-    (def m (c/lint-and-get-error input))
-    (e/emf (merge b {:locals {:exit-code exit-code :out out :err err}})
-           "possible problem in input source\n  %s%s"
-           input (if m (first m) "")))
-  #
-  (def [test-results test-out] (t/parse-output out))
-  (when-let [unreadable (c/has-unreadable? test-results)]
-    (e/emf b (string/format "unreadable value in:\n%s"
-                            (if (dyn :test/color?) "%M" "%m"))
-           unreadable))
-  #
-  [exit-code test-results test-out err])
-
 ########################################################################
 
 (defn c/mrr-single
   [input &opt opts]
   # try to make and run tests, then collect output
   (def [exit-code test-results test-out test-err]
-    (c/make-and-run input opts))
+    (t/make-and-run input opts))
   (when (= :no-tests exit-code)
     (break [:no-tests nil]))
   #
@@ -133,9 +78,9 @@
 
 (defn c/mru-single
   [input &opt opts]
-  (def b @{:in "make-run-update" :args {:input input :opts opts}})
+  (def b @{:in "mru-single" :args {:input input :opts opts}})
   # try to make and run tests, then collect output
-  (def [exit-code test-results _ _] (c/make-and-run input opts))
+  (def [exit-code test-results _ _] (t/make-and-run input opts))
   (when (= :no-tests exit-code)
     (break [:no-tests nil test-results]))
   # successful run means no tests to update
