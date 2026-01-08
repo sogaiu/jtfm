@@ -29,6 +29,7 @@
   (def test-path result)
   # run tests and collect output
   (def [ecode out err] (t/run-tests test-path))
+  (os/rm test-path)
   #
   (when (empty? out)
     (def m (c/lint-and-get-error input))
@@ -58,14 +59,14 @@
   (when expected-unreadable?
     (e/emf b fmt-str expected-unreadable?))
   #
-  [ecode test-path test-results test-out err])
+  [ecode test-results test-out err])
 
 ########################################################################
 
 (defn c/mrr-single
   [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-path test-results test-out test-err]
+  (def [ecode test-results test-out test-err]
     (c/make-and-run input opts))
   (when (= :no-tests ecode)
     (break [:no-tests nil]))
@@ -78,7 +79,6 @@
   (when (not= 0 ecode)
     (break [:ecode test-results]))
   #
-  (os/rm test-path)
   [:no-fails test-results])
 
 (defn c/make-run-report
@@ -136,12 +136,11 @@
   [input &opt opts]
   (def b @{:in "make-run-update" :args {:input input :opts opts}})
   # try to make and run tests, then collect output
-  (def [ecode test-path test-results _ _] (c/make-and-run input opts))
+  (def [ecode test-results _ _] (c/make-and-run input opts))
   (when (= :no-tests ecode)
     (break [:no-tests nil test-results]))
   # successful run means no tests to update
   (when (zero? ecode)
-    (os/rm test-path)
     (break [:no-updates nil test-results]))
   #
   (def fails (get test-results :fails))
@@ -156,8 +155,6 @@
   (when (not ret)
     (e/emf (merge b {:locals {:fails fails :update-info update-info}})
            "failed to patch: %n" input))
-  #
-  (os/rm test-path)
   #
   (def lines (map |(get $ 0) update-info))
   #
