@@ -42,12 +42,12 @@
   #
   (def test-path result)
   # run tests and collect output
-  (def [ecode out err] (t/run-tests test-path))
+  (def [exit-code out err] (t/run-tests test-path))
   (os/rm test-path)
   #
   (when (empty? out)
     (def m (c/lint-and-get-error input))
-    (e/emf (merge b {:locals {:ecode ecode :out out :err err}})
+    (e/emf (merge b {:locals {:exit-code exit-code :out out :err err}})
            "possible problem in input source\n  %s%s"
            input (if m (first m) "")))
   #
@@ -57,16 +57,16 @@
                             (if (dyn :test/color?) "%M" "%m"))
            unreadable))
   #
-  [ecode test-results test-out err])
+  [exit-code test-results test-out err])
 
 ########################################################################
 
 (defn c/mrr-single
   [input &opt opts]
   # try to make and run tests, then collect output
-  (def [ecode test-results test-out test-err]
+  (def [exit-code test-results test-out test-err]
     (c/make-and-run input opts))
-  (when (= :no-tests ecode)
+  (when (= :no-tests exit-code)
     (break [:no-tests nil]))
   #
   (def {:report report} opts)
@@ -74,8 +74,8 @@
   # print out results
   (report test-results test-out test-err)
   #
-  (when (not= 0 ecode)
-    (break [:ecode test-results]))
+  (when (not= 0 exit-code)
+    (break [:exit-code test-results]))
   #
   [:no-fails test-results])
 
@@ -106,7 +106,7 @@
           (l/notenf :i " - [%s]" ratio)
           (array/push p-paths path))
         #
-        :ecode
+        :exit-code
         (let [n-tests (get tr :num-tests)
               n-passes (- n-tests (length (get tr :fails)))
               ratio (o/color-ratio n-passes n-tests)]
@@ -125,8 +125,9 @@
     (l/notenf :i "Test failures in %d of %d file(s)."
               n-f-paths (+ n-f-paths n-p-paths)))
   #
-  [(if (zero? n-f-paths) 0 1)
-   test-results])
+  (def exit-code (if (zero? n-f-paths) 0 1))
+  #
+  [exit-code test-results])
 
 ########################################################################
 
@@ -134,11 +135,11 @@
   [input &opt opts]
   (def b @{:in "make-run-update" :args {:input input :opts opts}})
   # try to make and run tests, then collect output
-  (def [ecode test-results _ _] (c/make-and-run input opts))
-  (when (= :no-tests ecode)
+  (def [exit-code test-results _ _] (c/make-and-run input opts))
+  (when (= :no-tests exit-code)
     (break [:no-tests nil test-results]))
   # successful run means no tests to update
-  (when (zero? ecode)
+  (when (zero? exit-code)
     (break [:no-updates nil test-results]))
   #
   (def fails (get test-results :fails))
@@ -199,5 +200,7 @@
   #
   (l/notenf :i "Test(s) updated in %d file(s)." (length upd-paths))
   #
-  [0 test-results])
+  (def exit-code 0)
+  #
+  [exit-code test-results])
 
