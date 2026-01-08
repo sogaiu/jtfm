@@ -3096,7 +3096,7 @@
 
   )
 
-(defn r/rewrite-comment-zloc
+(defn r/rewrite-with-tests
   [comment-zloc]
   # move into comment block
   (var curr-zloc (j/down comment-zloc))
@@ -3162,7 +3162,7 @@
 
   (-> (j/par src)
       j/zip-down
-      r/rewrite-comment-zloc
+      r/rewrite-with-tests
       j/root
       j/gen)
   # =>
@@ -3188,7 +3188,7 @@
   [comment-src]
   (-> (j/par comment-src)
       j/zip-down
-      r/rewrite-comment-zloc
+      r/rewrite-with-tests
       j/root
       j/gen))
 
@@ -3231,8 +3231,8 @@
 
   )
 
-(defn r/rewrite
-  [src]
+(defn r/rewrite-comments-with
+  [src xform-fn]
   (var changed nil)
   # XXX: hack - not sure if robust enough
   (def eol-str (if (= :windows (os/which)) "\r\n" "\n"))
@@ -3255,7 +3255,7 @@
       # may be rewrite the located top-level comment block
       (set curr-zloc
            (if-let [rewritten-zloc
-                    (r/rewrite-comment-zloc comment-zloc)]
+                    (xform-fn comment-zloc)]
              (do
                (set changed true)
                (j/unwrap rewritten-zloc))
@@ -3266,6 +3266,10 @@
     (-> curr-zloc
         j/root
         j/gen)))
+
+(defn r/rewrite
+  [src]
+  (r/rewrite-comments-with src r/rewrite-with-tests))
 
 (comment
 
@@ -3429,6 +3433,137 @@
               eol-str
               "(_verify/report)"
               eol-str))))
+
+(defn r/rewrite-with-only-test-exprs
+  [comment-zloc]
+  # move into comment block
+  (var curr-zloc (j/down comment-zloc))
+  (var found-test nil)
+  # process comment block content
+  (while (not (j/end? curr-zloc))
+    (def [ti-zloc label-left label-right] (r/find-test-indicator curr-zloc))
+    (when (not ti-zloc)
+      (break))
+    #
+    (def [test-expr-zloc expected-expr-zloc] (r/find-exprs ti-zloc))
+    (set curr-zloc
+         (if (or (nil? test-expr-zloc)
+                 (nil? expected-expr-zloc))
+           (j/right curr-zloc) # next
+           # found a complete test, work on rewriting
+           (let [eol-str (if (= :windows (os/which)) "\r\n" "\n")]
+             (set found-test true)
+             (-> (j/wrap expected-expr-zloc [:tuple @{}])
+                 (j/insert-child [:whitespace @{} " "])
+                 (j/insert-child [:symbol @{} "comment"]))))))
+  # navigate back out to top of block
+  (when found-test
+    # morph comment block into plain tuple -- to be unwrapped later
+    (-> curr-zloc
+        j/up
+        j/down
+        (j/replace [:whitespace @{} " "])
+        # begin hack to prevent trailing whitespace once unwrapping occurs
+        j/rightmost
+        (j/insert-right [:keyword @{} ":smile"])
+        # end of hack
+        j/up)))
+
+(comment
+
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
+
+  (def src
+    (string "(comment"         eol
+            eol
+            "  (def a 1)"      eol
+            eol
+            "  (put @{} :a 2)" eol
+            "  # left =>"      eol
+            "  @{:a 2}"        eol
+            eol
+            "  (+ 1 1)"        eol
+            "  # => right"     eol
+            "  2"              eol
+            eol
+            "  )"))
+
+  (-> (j/par src)
+      j/zip-down
+      r/rewrite-with-only-test-exprs
+      j/root
+      j/gen)
+  # =>
+  (string "( "                     eol
+          eol
+          "  (def a 1)"            eol
+          eol
+          "  (put @{} :a 2)"       eol
+          "  # left =>"            eol
+          "  (comment @{:a 2})"    eol
+          eol
+          "  (+ 1 1)"              eol
+          "  # => right"           eol
+          "  (comment 2)"          eol
+          eol
+          "  :smile)")
+
+  )
+
+(defn r/rewrite-to-lint
+  [src]
+  (r/rewrite-comments-with src r/rewrite-with-only-test-exprs))
+
+# XXX: rewrite-comments-with adds a leading newline for processing
+#      purposes (see its source), but this causes all line numbers to
+#      be off by one.  to make the line numbers match up, the leading
+#      newline is removed.  it's nicer for the line numbers in the
+#      rewritten source to match up with the original source because
+#      linting messages can mention specific line numbers.
+(defn r/rewrite-as-file-to-lint
+  [src]
+  (when (not (empty? src))
+    (when-let [to-lint-src (r/rewrite-to-lint src)
+               nl-idx (string/find "\n" to-lint-src)]
+      # to make the line numbers match the original source
+      (string/slice to-lint-src (inc nl-idx)))))
+
+(comment
+
+  (def eol (if (= :windows (os/which)) "\r\n" "\n"))
+
+  (def src
+    (string "(comment"         eol
+            eol
+            "  (def a 1)"      eol
+            eol
+            "  (put @{} :a 2)" eol
+            "  # left =>"      eol
+            "  @{:a 2}"        eol
+            eol
+            "  (+ 1 1)"        eol
+            "  # => right"     eol
+            "  2"              eol
+            eol
+            "  )"))
+
+  (r/rewrite-as-file-to-lint src)
+  # =>
+  (string " " eol
+          eol
+          "  (def a 1)"         eol
+          eol
+          "  (put @{} :a 2)"    eol
+          "  # left =>"         eol
+          "  (comment @{:a 2})" eol
+          eol
+          "  (+ 1 1)"           eol
+          "  # => right"        eol
+          "  (comment 2)"       eol
+          eol
+          "  :smile")
+
+  )
 
 (defn r/patch-zloc
   [a-zloc update-info]
@@ -3623,6 +3758,19 @@
 
   )
 
+(defn t/make-lint-path
+  [in-path]
+  #
+  (string (t/make-test-path in-path) "-lint"))
+
+(comment
+
+  (t/make-lint-path "tmp/hello.janet")
+  # =>
+  "tmp/_hello.janet.jtfm-lint"
+
+  )
+
 (defn t/make-tests
   [in-path &opt opts]
   (def b {:in "make-tests" :args {:in-path in-path :opts opts}})
@@ -3719,6 +3867,18 @@
 
 
 
+(defn c/lint-and-get-error
+  [input]
+  (def lint-path (t/make-lint-path input))
+  (defer (os/rm lint-path)
+    (def lint-src (r/rewrite-as-file-to-lint (slurp input)))
+    (spit lint-path lint-src)
+    (def lint-buf @"")
+    (with-dyns [:err lint-buf] (flycheck lint-path))
+    # XXX: peg may need work
+    (peg/match ~(sequence "error: " (to ":") (capture (to "\n")))
+               lint-buf)))
+
 (defn c/make-and-run
   [input &opt opts]
   (def b @{:in "make-and-run" :args {:input input :opts opts}})
@@ -3734,8 +3894,10 @@
   (def [ecode out err] (t/run-tests test-path))
   #
   (when (empty? out)
+    (def m (c/lint-and-get-error input))
     (e/emf (merge b {:locals {:ecode ecode :out out :err err}})
-           "out should be non-empty - review verify.janet"))
+           "possible problem in input source\n  %s%s"
+           input (if m (first m) "")))
   #
   (def [test-results test-out] (t/parse-output out))
   (def fails (get test-results :fails))
@@ -3997,7 +4159,7 @@
 
 ###########################################################################
 
-(def version "2026-01-07_14-35-29")
+(def version "2026-01-08_12-30-35")
 
 (def usage
   ``

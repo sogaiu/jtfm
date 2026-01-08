@@ -4,6 +4,18 @@
 (import ./rewrite :prefix "")
 (import ./tests :prefix "")
 
+(defn c/lint-and-get-error
+  [input]
+  (def lint-path (t/make-lint-path input))
+  (defer (os/rm lint-path)
+    (def lint-src (r/rewrite-as-file-to-lint (slurp input)))
+    (spit lint-path lint-src)
+    (def lint-buf @"")
+    (with-dyns [:err lint-buf] (flycheck lint-path))
+    # XXX: peg may need work
+    (peg/match ~(sequence "error: " (to ":") (capture (to "\n")))
+               lint-buf)))
+
 (defn c/make-and-run
   [input &opt opts]
   (def b @{:in "make-and-run" :args {:input input :opts opts}})
@@ -19,8 +31,10 @@
   (def [ecode out err] (t/run-tests test-path))
   #
   (when (empty? out)
+    (def m (c/lint-and-get-error input))
     (e/emf (merge b {:locals {:ecode ecode :out out :err err}})
-           "out should be non-empty - review verify.janet"))
+           "possible problem in input source\n  %s%s"
+           input (if m (first m) "")))
   #
   (def [test-results test-out] (t/parse-output out))
   (def fails (get test-results :fails))

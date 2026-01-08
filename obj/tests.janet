@@ -18,6 +18,19 @@
 
   )
 
+(defn t/make-lint-path
+  [in-path]
+  #
+  (string (t/make-test-path in-path) "-lint"))
+
+(comment
+
+  (t/make-lint-path "tmp/hello.janet")
+  # =>
+  "tmp/_hello.janet.jtfm-lint"
+
+  )
+
 (defn t/make-tests
   [in-path &opt opts]
   (def b {:in "make-tests" :args {:in-path in-path :opts opts}})
