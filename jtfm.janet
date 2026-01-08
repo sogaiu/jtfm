@@ -3879,6 +3879,20 @@
     (peg/match ~(sequence "error: " (to ":") (capture (to "\n")))
                lint-buf)))
 
+(defn c/has-unreadable?
+  [test-results]
+  (var unreadable? nil)
+  (each f (get test-results :fails)
+    (when (get f :test-unreadable)
+      (set unreadable? f)
+      (break))
+    #
+    (when (get f :expected-unreadable)
+      (set unreadable? f)
+      (break)))
+  #
+  unreadable?)
+
 (defn c/make-and-run
   [input &opt opts]
   (def b @{:in "make-and-run" :args {:input input :opts opts}})
@@ -3901,26 +3915,10 @@
            input (if m (first m) "")))
   #
   (def [test-results test-out] (t/parse-output out))
-  (def fails (get test-results :fails))
-  (var test-unreadable? nil)
-  (var expected-unreadable? nil)
-  (each f fails
-    (when (get f :test-unreadable)
-      (set test-unreadable? f)
-      (break))
-      #
-    (when (get f :expected-unreadable)
-      (set expected-unreadable? f)
-      (break)))
-  #
-  (def fmt-str
-    (string/format "unreadable value in:\n%s"
-                   (if (dyn :test/color?) "%M" "%m")))
-  (when test-unreadable?
-    (e/emf b fmt-str test-unreadable?))
-  #
-  (when expected-unreadable?
-    (e/emf b fmt-str expected-unreadable?))
+  (when-let [unreadable (c/has-unreadable? test-results)]
+    (e/emf b (string/format "unreadable value in:\n%s"
+                            (if (dyn :test/color?) "%M" "%m"))
+           unreadable))
   #
   [ecode test-results test-out err])
 
@@ -4156,7 +4154,7 @@
 
 ###########################################################################
 
-(def version "2026-01-08_14-09-36")
+(def version "2026-01-08_14-30-32")
 
 (def usage
   ``
